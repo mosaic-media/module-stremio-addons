@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
@@ -26,9 +27,16 @@ const (
 	streamProvider = "stremio"
 )
 
-// Capability satisfies the SDK's capability contract. The assertion fails to
-// compile if the module drifts from what the Platform invokes.
-var _ v1.Capability = (*Capability)(nil)
+// Capability satisfies the SDK's capability contract and every provider role it
+// declares in its Manifest. The assertions fail to compile if the module drifts
+// from what the Platform invokes or from a role it claims to fill (ADR 0027).
+var (
+	_ v1.Capability       = (*Capability)(nil)
+	_ v1.MetadataProvider = (*Capability)(nil)
+	_ v1.SearchProvider   = (*Capability)(nil)
+	_ v1.CatalogProvider  = (*Capability)(nil)
+	_ v1.StreamProvider   = (*Capability)(nil)
+)
 
 // Capability is the Stremio addon-source module (ADR 0008's capability
 // surface, first populated). It holds only an HTTP client; the addons it
@@ -69,31 +77,47 @@ func addonsFrom(settings []byte) ([]string, error) {
 	return out, nil
 }
 
-// Manifest is the module's self-declaration.
-func (c *Capability) Manifest() v1.Manifest {
-	return v1.Manifest{ID: CapabilityID, Version: moduleVersion, Name: "Stremio addon source"}
+// clientFrom builds a client over the addons configured in settings, or returns
+// an error naming how to configure one when none are set. Every entry point —
+// Import and each provider role — starts here, so the "no addons" message is
+// identical wherever a user hits it.
+func (c *Capability) clientFrom(settings []byte) (*Client, error) {
+	addons, err := addonsFrom(settings)
+	if err != nil {
+		return nil, err
+	}
+	if len(addons) == 0 {
+		return nil, fmt.Errorf(`no Stremio addons configured; add one with configureModule (settings {"addons":["<manifest-url>"]})`)
+	}
+	return NewClient(c.httpClient, addons...), nil
 }
 
-// Import sources the content named by query — "movie/<imdb-id>" or
-// "series/<imdb-id>" — from the configured addons and reflects it into the
+// Manifest is the module's self-declaration, including the provider roles it
+// fills (ADR 0027). It sources metadata and searches and browses catalogs, and
+// resolves streams — the four Stremio addon resources.
+func (c *Capability) Manifest() v1.Manifest {
+	return v1.Manifest{
+		ID: CapabilityID, Version: moduleVersion, Name: "Stremio addon source",
+		Provides: []v1.Role{v1.RoleMetadata, v1.RoleSearch, v1.RoleCatalog, v1.RoleStream},
+	}
+}
+
+// Import materialises the virtual item named by req.Ref — a result a search or
+// catalog browse produced (ADR 0028) — from the configured addons into the
 // Platform. It fetches metadata (required), searches to avoid duplicating,
 // creates the Work with an external-id binding, builds the tree, and attaches
 // a RemoteLocation Part wherever a stream addon serves one. Metadata alone is
 // a complete import; streams are additive.
 func (c *Capability) Import(ctx context.Context, svc v1.ContentService, req v1.ImportRequest) (v1.ImportResult, error) {
-	addons, err := addonsFrom(req.Settings)
+	client, err := c.clientFrom(req.Settings)
 	if err != nil {
 		return v1.ImportResult{}, err
 	}
-	if len(addons) == 0 {
-		return v1.ImportResult{}, fmt.Errorf(`no Stremio addons configured; add one with configureModule (settings {"addons":["<manifest-url>"]})`)
-	}
-	client := NewClient(c.httpClient, addons...)
 	caller := req.Caller
 
-	typ, id, err := parseQuery(req.Query)
-	if err != nil {
-		return v1.ImportResult{}, err
+	typ, id := req.Ref.NativeType, req.Ref.NativeID
+	if typ == "" || id == "" {
+		return v1.ImportResult{}, fmt.Errorf("ref needs a native type and id, got type=%q id=%q", typ, id)
 	}
 
 	meta, ok, err := client.Meta(ctx, typ, id)
@@ -236,14 +260,148 @@ func (c *Capability) find(ctx context.Context, svc v1.ContentService, caller v1.
 	return "", false, nil
 }
 
-// parseQuery splits a "type/id" query. The type is the Stremio content type
-// (movie, series); the id is the addon's content id, an IMDB id in practice.
-func parseQuery(query string) (typ, id string, err error) {
-	typ, id, found := strings.Cut(strings.TrimSpace(query), "/")
-	if !found || typ == "" || id == "" {
-		return "", "", fmt.Errorf("query %q must be of the form type/id, e.g. movie/tt1254207", query)
+// Metadata resolves descriptive detail for a ref (RoleMetadata — the addon
+// `meta` resource). It is the enrichment surface: the descriptive fields, not
+// the containment tree, which Import builds where the source's structure is
+// known (ADR 0027).
+func (c *Capability) Metadata(ctx context.Context, req v1.MetadataRequest) (v1.ContentMetadata, error) {
+	client, err := c.clientFrom(req.Settings)
+	if err != nil {
+		return v1.ContentMetadata{}, err
 	}
-	return typ, id, nil
+	meta, ok, err := client.Meta(ctx, req.Ref.NativeType, req.Ref.NativeID)
+	if err != nil {
+		return v1.ContentMetadata{}, fmt.Errorf("fetch metadata: %w", err)
+	}
+	if !ok {
+		return v1.ContentMetadata{}, fmt.Errorf("no configured addon served metadata for %s/%s", req.Ref.NativeType, req.Ref.NativeID)
+	}
+	return v1.ContentMetadata{
+		Ref:      req.Ref,
+		Title:    meta.Name,
+		Year:     parseYear(meta.ReleaseInfo),
+		Overview: meta.Description,
+		Poster:   meta.Poster,
+		Backdrop: meta.Background,
+		Genres:   meta.Genres,
+	}, nil
+}
+
+// Search returns virtual candidates for free text (RoleSearch — the addon
+// `catalog/…/search` resource). No raw id: this is what makes user search in
+// Mosaic work over source content that is not in the library (ADR 0028).
+func (c *Capability) Search(ctx context.Context, req v1.SearchRequest) (v1.SearchResponse, error) {
+	client, err := c.clientFrom(req.Settings)
+	if err != nil {
+		return v1.SearchResponse{}, err
+	}
+	metas, err := client.Search(ctx, req.Text)
+	if err != nil {
+		return v1.SearchResponse{}, fmt.Errorf("search: %w", err)
+	}
+	results := make([]v1.SearchResult, 0, len(metas))
+	for _, m := range metas {
+		if req.MediaType != "" && mediaTypeFor(m.Type) != req.MediaType {
+			continue
+		}
+		results = append(results, v1.SearchResult{
+			Ref: refFrom(m), Title: m.Name, Year: parseYear(m.ReleaseInfo), Poster: m.Poster,
+		})
+	}
+	return v1.SearchResponse{Results: results}, nil
+}
+
+// Catalogs lists the collections the configured addons expose (RoleCatalog —
+// the addon `catalog` resource), for the admin collection browser.
+func (c *Capability) Catalogs(ctx context.Context, req v1.CatalogsRequest) (v1.CatalogsResponse, error) {
+	client, err := c.clientFrom(req.Settings)
+	if err != nil {
+		return v1.CatalogsResponse{}, err
+	}
+	decls, err := client.Catalogs(ctx)
+	if err != nil {
+		return v1.CatalogsResponse{}, fmt.Errorf("list catalogs: %w", err)
+	}
+	cats := make([]v1.Catalog, 0, len(decls))
+	for _, d := range decls {
+		cats = append(cats, v1.Catalog{ID: d.ID, NativeType: d.Type, Name: catalogName(d)})
+	}
+	return v1.CatalogsResponse{Catalogs: cats}, nil
+}
+
+// CatalogItems lists one collection's entries as virtual candidates the admin
+// can select to publish (ADR 0028). It does not touch the object graph.
+func (c *Capability) CatalogItems(ctx context.Context, req v1.CatalogItemsRequest) (v1.CatalogItemsResponse, error) {
+	client, err := c.clientFrom(req.Settings)
+	if err != nil {
+		return v1.CatalogItemsResponse{}, err
+	}
+	metas, err := client.CatalogItems(ctx, req.NativeType, req.CatalogID, req.Skip)
+	if err != nil {
+		return v1.CatalogItemsResponse{}, fmt.Errorf("list catalog items: %w", err)
+	}
+	items := make([]v1.CatalogItem, 0, len(metas))
+	for _, m := range metas {
+		items = append(items, v1.CatalogItem{
+			Ref: refFrom(m), Title: m.Name, Year: parseYear(m.ReleaseInfo), Poster: m.Poster,
+		})
+	}
+	return v1.CatalogItemsResponse{Items: items}, nil
+}
+
+// Streams resolves playable locations for a materialised item's ref (RoleStream
+// — the addon `stream` resource). Import snapshots streams at materialise time;
+// this exposes the same resolution as a role other flows can call. It returns an
+// empty response, no error, when no addon serves a stream (the meta-only case).
+func (c *Capability) Streams(ctx context.Context, req v1.StreamRequest) (v1.StreamResponse, error) {
+	client, err := c.clientFrom(req.Settings)
+	if err != nil {
+		return v1.StreamResponse{}, err
+	}
+	stream, ok, err := client.Stream(ctx, req.Ref.NativeType, req.Ref.NativeID)
+	if err != nil {
+		return v1.StreamResponse{}, fmt.Errorf("resolve streams: %w", err)
+	}
+	if !ok {
+		return v1.StreamResponse{}, nil
+	}
+	return v1.StreamResponse{Streams: []v1.StreamLink{{
+		Label:    stream.Name,
+		Location: v1.MediaLocation{Scheme: v1.RemoteLocation, Provider: streamProvider, Ref: stream.Ref()},
+	}}}, nil
+}
+
+// refFrom builds a ContentRef from a catalog/search preview. Stremio content is
+// keyed by IMDB id, so the native id doubles as the external id the Platform
+// dedups and binds on (ADR 0028).
+func refFrom(m MetaPreview) v1.ContentRef {
+	return v1.ContentRef{
+		Provider: CapabilityID, NativeID: m.ID, NativeType: m.Type,
+		MediaType: mediaTypeFor(m.Type), ExternalScheme: providerScheme, ExternalID: m.ID,
+	}
+}
+
+// parseYear reads the leading year from a Stremio releaseInfo ("2017",
+// "2008-2013"), returning 0 when there is none.
+func parseYear(s string) int {
+	s = strings.TrimSpace(s)
+	if len(s) < 4 {
+		return 0
+	}
+	y, err := strconv.Atoi(s[:4])
+	if err != nil {
+		return 0
+	}
+	return y
+}
+
+// catalogName is the catalog's declared name, or a type/id fallback when it
+// declares none.
+func catalogName(d CatalogDecl) string {
+	if d.Name != "" {
+		return d.Name
+	}
+	return d.Type + " " + d.ID
 }
 
 // mediaTypeFor maps a Stremio content type to a Platform media type, using the

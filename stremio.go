@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -80,6 +82,53 @@ type Manifest struct {
 	Version   string         `json:"version"`
 	Resources []ResourceDecl `json:"resources"`
 	Types     []string       `json:"types"`
+	Catalogs  []CatalogDecl  `json:"catalogs"`
+}
+
+// CatalogDecl is one entry of a manifest's catalogs array — a collection the
+// addon exposes (Popular, Top). A catalog is typed and addressed by its id; the
+// extra declarations say which query parameters it accepts, the one that
+// matters here being "search".
+type CatalogDecl struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Extra is the modern shape: a list of accepted parameters, each named.
+	Extra []ExtraDecl `json:"extra"`
+	// ExtraSupported is the older shape: a bare list of accepted parameter
+	// names. Both are read so search is detected whichever an addon uses.
+	ExtraSupported []string `json:"extraSupported"`
+}
+
+// ExtraDecl is one accepted catalog parameter.
+type ExtraDecl struct {
+	Name string `json:"name"`
+}
+
+// SupportsSearch reports whether the catalog accepts a search query.
+func (c CatalogDecl) SupportsSearch() bool {
+	for _, e := range c.Extra {
+		if e.Name == "search" {
+			return true
+		}
+	}
+	for _, n := range c.ExtraSupported {
+		if n == "search" {
+			return true
+		}
+	}
+	return false
+}
+
+// MetaPreview is the subset of a catalog/search meta entry this client reads —
+// the lightweight item shape a catalog returns, distinct from the full Meta a
+// meta lookup returns. ReleaseInfo is a year ("2017") or a range ("2008-2013").
+type MetaPreview struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	Name        string `json:"name"`
+	Poster      string `json:"poster"`
+	ReleaseInfo string `json:"releaseInfo"`
 }
 
 // ResourceDecl is one entry of a manifest's resources array. Stremio allows
@@ -113,11 +162,15 @@ func (r *ResourceDecl) UnmarshalJSON(b []byte) error {
 // Meta is the subset of a meta response this client reads. For a series,
 // Videos lists the episodes, each carrying its season and episode number.
 type Meta struct {
-	ID     string  `json:"id"`
-	Type   string  `json:"type"`
-	Name   string  `json:"name"`
-	Poster string  `json:"poster"`
-	Videos []Video `json:"videos"`
+	ID          string   `json:"id"`
+	Type        string   `json:"type"`
+	Name        string   `json:"name"`
+	Poster      string   `json:"poster"`
+	Background  string   `json:"background"`
+	Description string   `json:"description"`
+	ReleaseInfo string   `json:"releaseInfo"`
+	Genres      []string `json:"genres"`
+	Videos      []Video  `json:"videos"`
 }
 
 // Video is one episode of a series' meta.
@@ -213,6 +266,95 @@ func (c *Client) Stream(ctx context.Context, typ, id string) (Stream, bool, erro
 		}
 	}
 	return Stream{}, false, nil
+}
+
+// Catalogs returns the catalog declarations across every configured addon, in
+// configuration order. It is the source's collection list — what the admin
+// collection browser enumerates before choosing what to publish.
+func (c *Client) Catalogs(ctx context.Context) ([]CatalogDecl, error) {
+	var out []CatalogDecl
+	for _, a := range c.addons {
+		if err := c.ensureManifest(ctx, a); err != nil {
+			return nil, err
+		}
+		out = append(out, a.manifest.Catalogs...)
+	}
+	return out, nil
+}
+
+// CatalogItems lists one catalog's entries, from the first addon whose manifest
+// declares a catalog of that type and id. skip pages through a large catalog
+// (0 for the first page). It returns nil, no error, when no configured addon
+// declares the catalog.
+func (c *Client) CatalogItems(ctx context.Context, typ, id string, skip int) ([]MetaPreview, error) {
+	for _, a := range c.addons {
+		if err := c.ensureManifest(ctx, a); err != nil {
+			return nil, err
+		}
+		if !hasCatalog(a.manifest, typ, id) {
+			continue
+		}
+		u := a.baseURL + "/catalog/" + typ + "/" + id
+		if skip > 0 {
+			u += "/skip=" + strconv.Itoa(skip)
+		}
+		u += ".json"
+		var resp struct {
+			Metas []MetaPreview `json:"metas"`
+		}
+		if err := c.getJSON(ctx, u, &resp); err != nil {
+			return nil, err
+		}
+		return resp.Metas, nil
+	}
+	return nil, nil
+}
+
+// Search queries every search-capable catalog across every configured addon and
+// returns the union, de-duplicated by content id. A catalog that errors on the
+// search query is skipped rather than failing the whole search, so one broken
+// addon does not blank the results. It returns nil, no error, when nothing
+// matches or no addon offers search.
+func (c *Client) Search(ctx context.Context, query string) ([]MetaPreview, error) {
+	var out []MetaPreview
+	seen := make(map[string]bool)
+	for _, a := range c.addons {
+		if err := c.ensureManifest(ctx, a); err != nil {
+			return nil, err
+		}
+		for _, cat := range a.manifest.Catalogs {
+			if !cat.SupportsSearch() {
+				continue
+			}
+			u := a.baseURL + "/catalog/" + cat.Type + "/" + cat.ID + "/search=" + url.PathEscape(query) + ".json"
+			var resp struct {
+				Metas []MetaPreview `json:"metas"`
+			}
+			if err := c.getJSON(ctx, u, &resp); err != nil {
+				// A search-declared catalog may still refuse a particular query;
+				// treat that as "no matches here", not a failed search.
+				continue
+			}
+			for _, m := range resp.Metas {
+				if !seen[m.ID] {
+					seen[m.ID] = true
+					out = append(out, m)
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// hasCatalog reports whether a manifest declares a catalog of the given type
+// and id.
+func hasCatalog(m Manifest, typ, id string) bool {
+	for _, cat := range m.Catalogs {
+		if cat.Type == typ && cat.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureManifest fetches and caches an addon's manifest on first use.

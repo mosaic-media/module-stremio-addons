@@ -27,7 +27,7 @@ func TestImportMovie(t *testing.T) {
 	content := newFakeContent()
 
 	res, err := cap.Import(context.Background(), content, v1.ImportRequest{
-		Caller: v1.CallerFromSession("s-1"), Query: "movie/tt1254207", Settings: addonSettings(server.URL),
+		Caller: v1.CallerFromSession("s-1"), Ref: movieRef("tt1254207"), Settings: addonSettings(server.URL),
 	})
 	if err != nil {
 		t.Fatalf("Import: %v", err)
@@ -73,7 +73,7 @@ func TestImportSeries(t *testing.T) {
 	content := newFakeContent()
 
 	res, err := cap.Import(context.Background(), content, v1.ImportRequest{
-		Caller: v1.CallerFromSession("s-1"), Query: "series/tt0903747", Settings: addonSettings(server.URL),
+		Caller: v1.CallerFromSession("s-1"), Ref: seriesRef("tt0903747"), Settings: addonSettings(server.URL),
 	})
 	if err != nil {
 		t.Fatalf("Import: %v", err)
@@ -106,7 +106,7 @@ func TestImportMetadataOnlyWhenAddonHasNoStreams(t *testing.T) {
 	content := newFakeContent()
 
 	res, err := cap.Import(context.Background(), content, v1.ImportRequest{
-		Caller: v1.CallerFromSession("s-1"), Query: "movie/tt1254207", Settings: addonSettings(server.URL),
+		Caller: v1.CallerFromSession("s-1"), Ref: movieRef("tt1254207"), Settings: addonSettings(server.URL),
 	})
 	if err != nil {
 		t.Fatalf("Import: %v", err)
@@ -126,7 +126,7 @@ func TestImportIsIdempotent(t *testing.T) {
 	content := newFakeContent()
 	ctx := context.Background()
 
-	req := v1.ImportRequest{Caller: v1.CallerFromSession("s-1"), Query: "movie/tt1254207", Settings: addonSettings(server.URL)}
+	req := v1.ImportRequest{Caller: v1.CallerFromSession("s-1"), Ref: movieRef("tt1254207"), Settings: addonSettings(server.URL)}
 	first, err := cap.Import(ctx, content, req)
 	if err != nil {
 		t.Fatalf("first Import: %v", err)
@@ -146,14 +146,14 @@ func TestImportIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestImportRejectsMalformedQuery(t *testing.T) {
+func TestImportRejectsEmptyRef(t *testing.T) {
 	cap := stremio.New(nil)
-	// An addon is configured so the query is what's rejected, not the settings.
+	// An addon is configured so the ref is what's rejected, not the settings.
 	_, err := cap.Import(context.Background(), newFakeContent(), v1.ImportRequest{
-		Caller: v1.CallerFromSession("s-1"), Query: "tt1254207", Settings: addonSettings("http://unused.example"),
+		Caller: v1.CallerFromSession("s-1"), Ref: v1.ContentRef{NativeType: "movie"}, Settings: addonSettings("http://unused.example"),
 	})
 	if err == nil {
-		t.Fatal("a query without a type/ prefix must be rejected")
+		t.Fatal("a ref without a native id must be rejected")
 	}
 }
 
@@ -161,7 +161,7 @@ func TestImportRequiresConfiguredAddons(t *testing.T) {
 	cap := stremio.New(nil)
 	// No settings at all: the module has no addon to source from.
 	_, err := cap.Import(context.Background(), newFakeContent(), v1.ImportRequest{
-		Caller: v1.CallerFromSession("s-1"), Query: "movie/tt1254207",
+		Caller: v1.CallerFromSession("s-1"), Ref: movieRef("tt1254207"),
 	})
 	if err == nil {
 		t.Fatal("an import with no addons configured must be rejected")
@@ -172,6 +172,16 @@ func TestImportRequiresConfiguredAddons(t *testing.T) {
 func addonSettings(urls ...string) []byte {
 	b, _ := json.Marshal(map[string][]string{"addons": urls})
 	return b
+}
+
+// movieRef and seriesRef build the ContentRef the Platform hands Import for a
+// chosen result — the shape a search or catalog browse produced.
+func movieRef(id string) v1.ContentRef {
+	return v1.ContentRef{Provider: "stremio", NativeID: id, NativeType: "movie", MediaType: v1.MediaMovie, ExternalScheme: "imdb", ExternalID: id}
+}
+
+func seriesRef(id string) v1.ContentRef {
+	return v1.ContentRef{Provider: "stremio", NativeID: id, NativeType: "series", MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: id}
 }
 
 // ---- fake Stremio addon ----
@@ -193,18 +203,34 @@ func fakeAddon(mode addonMode) *httptest.Server {
 		"id":        "org.fake.addon",
 		"name":      "Fake Addon",
 		"version":   "1.0.0",
-		"resources": resources,
+		"resources": append(append([]string{}, resources...), "catalog"),
 		"types":     []string{"movie", "series"},
+		// Two catalogs, both search-capable, so search and browse have something
+		// to hit. A search-capable catalog declares "search" in its extra.
+		"catalogs": []map[string]interface{}{
+			{"type": "movie", "id": "top", "name": "Popular Movies", "extra": []map[string]interface{}{{"name": "search"}}},
+			{"type": "series", "id": "top", "name": "Popular Series", "extra": []map[string]interface{}{{"name": "search"}}},
+		},
 	}
+
+	movieMeta := map[string]interface{}{"id": "tt1254207", "type": "movie", "name": "Blade Runner 2049", "poster": "http://img/br", "releaseInfo": "2017"}
+	seriesMeta := map[string]interface{}{"id": "tt0903747", "type": "series", "name": "Breaking Bad", "poster": "http://img/bb", "releaseInfo": "2008"}
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
 		case path == "/manifest.json":
 			writeJSON(w, manifest)
+		// Catalog listing and search share a prefix; both return meta previews
+		// of the type in the path, so browse and search exercise both types.
+		case strings.HasPrefix(path, "/catalog/movie/"):
+			writeJSON(w, map[string]interface{}{"metas": []map[string]interface{}{movieMeta}})
+		case strings.HasPrefix(path, "/catalog/series/"):
+			writeJSON(w, map[string]interface{}{"metas": []map[string]interface{}{seriesMeta}})
 		case strings.HasPrefix(path, "/meta/movie/"):
 			writeJSON(w, map[string]interface{}{"meta": map[string]interface{}{
 				"id": "tt1254207", "type": "movie", "name": "Blade Runner 2049",
+				"releaseInfo": "2017", "description": "A young blade runner's discovery.",
 			}})
 		case strings.HasPrefix(path, "/meta/series/"):
 			writeJSON(w, map[string]interface{}{"meta": map[string]interface{}{
