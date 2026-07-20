@@ -17,7 +17,7 @@ const (
 	// caller names to invoke it.
 	CapabilityID = "stremio"
 	// moduleVersion is this module's own version, reported in its Manifest.
-	moduleVersion = "0.2.0"
+	moduleVersion = "0.3.0"
 	// providerScheme is the external-id scheme and source-binding provider the
 	// module keys content under: Stremio content is identified by IMDB id.
 	providerScheme = "imdb"
@@ -283,8 +283,80 @@ func (c *Capability) Metadata(ctx context.Context, req v1.MetadataRequest) (v1.C
 		Overview: meta.Description,
 		Poster:   meta.Poster,
 		Backdrop: meta.Background,
+		Logo:     meta.Logo,
 		Genres:   meta.Genres,
+		Rating:   parseRating(meta.ImdbRating),
+		Runtime:  meta.Runtime,
+		Cast:     castOf(meta),
+		Episodes: episodesOf(meta.Videos),
 	}, nil
+}
+
+// castOf reads the cast names from a meta, preferring the modern `links` array
+// (category "Cast") and falling back to the legacy top-level `cast` list. Names
+// are de-duplicated and capped, since a detail shows the *top* cast, not all of
+// it. Cinemeta gives names only, so Role is left empty (ADR 0034).
+func castOf(meta Meta) []v1.Person {
+	const maxCast = 18
+	seen := make(map[string]bool)
+	out := make([]v1.Person, 0, maxCast)
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] || len(out) >= maxCast {
+			return
+		}
+		seen[name] = true
+		out = append(out, v1.Person{Name: name})
+	}
+	for _, l := range meta.Links {
+		if strings.EqualFold(l.Category, "Cast") || strings.EqualFold(l.Category, "actor") {
+			add(l.Name)
+		}
+	}
+	for _, name := range meta.Cast {
+		add(name)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// episodesOf projects a series' flat video list into the episode preview (ADR
+// 0034), ordered by season then episode. It carries the synopsis, still and air
+// date the detail shows; the materialised tree remains Import's concern.
+func episodesOf(videos []Video) []v1.EpisodePreview {
+	if len(videos) == 0 {
+		return nil
+	}
+	out := make([]v1.EpisodePreview, 0, len(videos))
+	for _, s := range groupBySeason(videos) {
+		for _, v := range s.episodes {
+			out = append(out, v1.EpisodePreview{
+				Season:    s.number,
+				Episode:   v.Episode,
+				Title:     v.EpisodeTitle(),
+				Overview:  v.Overview,
+				Thumbnail: v.Thumbnail,
+				Released:  v.Released,
+			})
+		}
+	}
+	return out
+}
+
+// parseRating reads Cinemeta's string rating ("8.0") into a float, 0 when absent
+// or unparseable.
+func parseRating(s string) float64 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return f
 }
 
 // Search returns virtual candidates for free text (RoleSearch — the addon

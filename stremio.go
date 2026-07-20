@@ -161,25 +161,50 @@ func (r *ResourceDecl) UnmarshalJSON(b []byte) error {
 
 // Meta is the subset of a meta response this client reads. For a series,
 // Videos lists the episodes, each carrying its season and episode number.
+// Logo/ImdbRating/Runtime/Cast/Links back the rich detail surface (ADR 0034);
+// Cinemeta provides them all — the module simply decoded none of them before.
 type Meta struct {
 	ID          string   `json:"id"`
 	Type        string   `json:"type"`
 	Name        string   `json:"name"`
 	Poster      string   `json:"poster"`
 	Background  string   `json:"background"`
+	Logo        string   `json:"logo"`
 	Description string   `json:"description"`
 	ReleaseInfo string   `json:"releaseInfo"`
 	Genres      []string `json:"genres"`
-	Videos      []Video  `json:"videos"`
+	// ImdbRating is Cinemeta's rating, a string ("8.0") in its API.
+	ImdbRating string `json:"imdbRating"`
+	// Runtime is a display string whose format varies ("120 min").
+	Runtime string `json:"runtime"`
+	// Cast is the legacy top-level cast (names). Modern Cinemeta also puts cast
+	// in Links with category "Cast"; both are read (see castNames).
+	Cast   []string `json:"cast"`
+	Links  []Link   `json:"links"`
+	Videos []Video  `json:"videos"`
 }
 
-// Video is one episode of a series' meta.
+// Link is one entry of a meta's `links` array — the modern Cinemeta shape that
+// carries cast, directors, writers and genres as categorised references.
+type Link struct {
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	URL      string `json:"url"`
+}
+
+// Video is one episode of a series' meta. Overview/Thumbnail/Released back the
+// episode preview (ADR 0034); Cinemeta provides them on each video entry.
 type Video struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Name    string `json:"name"`
-	Season  int    `json:"season"`
-	Episode int    `json:"episode"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Name     string `json:"name"`
+	Season   int    `json:"season"`
+	Episode  int    `json:"episode"`
+	Overview string `json:"overview"`
+	// Thumbnail is a still image URL for the episode.
+	Thumbnail string `json:"thumbnail"`
+	// Released is the episode's air date (an ISO datetime in Cinemeta).
+	Released string `json:"released"`
 }
 
 // EpisodeTitle is the video's title, falling back to its name and then a
