@@ -17,7 +17,7 @@ const (
 	// caller names to invoke it.
 	CapabilityID = "stremio"
 	// moduleVersion is this module's own version, reported in its Manifest.
-	moduleVersion = "0.1.0"
+	moduleVersion = "0.2.0"
 	// providerScheme is the external-id scheme and source-binding provider the
 	// module keys content under: Stremio content is identified by IMDB id.
 	providerScheme = "imdb"
