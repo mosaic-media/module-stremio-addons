@@ -84,6 +84,10 @@ type Manifest struct {
 	Resources []ResourceDecl `json:"resources"`
 	Types     []string       `json:"types"`
 	Catalogs  []CatalogDecl  `json:"catalogs"`
+	// AddonCatalogs are catalogs of *other addons* this addon exposes (the
+	// `addon_catalog` resource) — how a user discovers installable addons without
+	// a manifest URL (ADR 0038).
+	AddonCatalogs []CatalogDecl `json:"addonCatalogs"`
 }
 
 // CatalogDecl is one entry of a manifest's catalogs array — a collection the
@@ -273,7 +277,10 @@ type Subtitle struct {
 func (c *Client) Meta(ctx context.Context, typ, id string) (Meta, bool, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			return Meta{}, false, err
+			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
+			// is skipped rather than failing the whole operation, so one bad addon
+			// does not blank search, browse, or metadata (ADR 0038).
+			continue
 		}
 		if !supports(a.manifest, "meta", typ, id) {
 			continue
@@ -299,7 +306,10 @@ func (c *Client) Meta(ctx context.Context, typ, id string) (Meta, bool, error) {
 func (c *Client) Stream(ctx context.Context, typ, id string) (Stream, bool, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			return Stream{}, false, err
+			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
+			// is skipped rather than failing the whole operation, so one bad addon
+			// does not blank search, browse, or metadata (ADR 0038).
+			continue
 		}
 		if !supports(a.manifest, "stream", typ, id) {
 			continue
@@ -326,7 +336,10 @@ func (c *Client) Stream(ctx context.Context, typ, id string) (Stream, bool, erro
 func (c *Client) Subtitles(ctx context.Context, typ, id string) ([]Subtitle, bool, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			return nil, false, err
+			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
+			// is skipped rather than failing the whole operation, so one bad addon
+			// does not blank search, browse, or metadata (ADR 0038).
+			continue
 		}
 		if !supports(a.manifest, "subtitles", typ, id) {
 			continue
@@ -351,7 +364,10 @@ func (c *Client) Catalogs(ctx context.Context) ([]CatalogDecl, error) {
 	var out []CatalogDecl
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			return nil, err
+			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
+			// is skipped rather than failing the whole operation, so one bad addon
+			// does not blank search, browse, or metadata (ADR 0038).
+			continue
 		}
 		out = append(out, a.manifest.Catalogs...)
 	}
@@ -365,7 +381,10 @@ func (c *Client) Catalogs(ctx context.Context) ([]CatalogDecl, error) {
 func (c *Client) CatalogItems(ctx context.Context, typ, id string, skip int) ([]MetaPreview, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			return nil, err
+			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
+			// is skipped rather than failing the whole operation, so one bad addon
+			// does not blank search, browse, or metadata (ADR 0038).
+			continue
 		}
 		if !hasCatalog(a.manifest, typ, id) {
 			continue
@@ -396,7 +415,10 @@ func (c *Client) Search(ctx context.Context, query string) ([]MetaPreview, error
 	seen := make(map[string]bool)
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			return nil, err
+			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
+			// is skipped rather than failing the whole operation, so one bad addon
+			// does not blank search, browse, or metadata (ADR 0038).
+			continue
 		}
 		for _, cat := range a.manifest.Catalogs {
 			if !cat.SupportsSearch() {
@@ -415,6 +437,45 @@ func (c *Client) Search(ctx context.Context, query string) ([]MetaPreview, error
 				if !seen[m.ID] {
 					seen[m.ID] = true
 					out = append(out, m)
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// AddonCatalogEntry is one installable addon a catalog of addons lists (ADR
+// 0038): its transport (manifest) URL and enough of its manifest to name it.
+type AddonCatalogEntry struct {
+	TransportURL string   `json:"transportUrl"`
+	Manifest     Manifest `json:"manifest"`
+}
+
+// AddonCatalog fetches the union of every configured addon's addon catalogs —
+// the installable addons a user can add without pasting a manifest URL. Addons
+// that do not serve the resource contribute nothing; a fetch that errors is
+// skipped rather than failing the whole browse. De-duped by transport URL.
+func (c *Client) AddonCatalog(ctx context.Context) ([]AddonCatalogEntry, error) {
+	var out []AddonCatalogEntry
+	seen := make(map[string]bool)
+	for _, a := range c.addons {
+		if err := c.ensureManifest(ctx, a); err != nil {
+			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
+			// is skipped rather than failing the whole operation, so one bad addon
+			// does not blank search, browse, or metadata (ADR 0038).
+			continue
+		}
+		for _, cat := range a.manifest.AddonCatalogs {
+			var resp struct {
+				Addons []AddonCatalogEntry `json:"addons"`
+			}
+			if err := c.getJSON(ctx, a.baseURL+"/addon_catalog/"+cat.Type+"/"+cat.ID+".json", &resp); err != nil {
+				continue
+			}
+			for _, e := range resp.Addons {
+				if e.TransportURL != "" && !seen[e.TransportURL] {
+					seen[e.TransportURL] = true
+					out = append(out, e)
 				}
 			}
 		}

@@ -1,0 +1,45 @@
+package stremio_test
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	stremio "github.com/mosaic-media/mosaic-module-stremio"
+	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+)
+
+// TestSettingsUIRendersSections proves the module contributes a settings screen
+// (ADR 0038): a Screen carrying the add-by-URL form (a SubmitField whose action
+// carries the "$value" placeholder and configureModule), the installed addon
+// with a Remove control, and a browse section. addonSettings opts out of the
+// bundled default, so the only installed addon is the fake, keeping it hermetic.
+func TestSettingsUIRendersSections(t *testing.T) {
+	server := fakeAddon(withStreams)
+	defer server.Close()
+	cap := stremio.New(server.Client())
+
+	resp, err := cap.SettingsUI(context.Background(), v1.SettingsUIRequest{
+		Caller: v1.CallerFromSession("s-1"), Settings: addonSettings(server.URL),
+	})
+	if err != nil {
+		t.Fatalf("SettingsUI: %v", err)
+	}
+
+	// The UI is a serialised UINode Screen.
+	var root map[string]any
+	if err := json.Unmarshal(resp.UI, &root); err != nil {
+		t.Fatalf("settings UI is not valid JSON: %v", err)
+	}
+	if root["type"] != "Screen" {
+		t.Fatalf("root type = %v, want Screen", root["type"])
+	}
+
+	s := string(resp.UI)
+	for _, want := range []string{"SubmitField", "$value", "configureModule", "Add an addon", "Installed addons", server.URL, "Remove"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("settings UI missing %q", want)
+		}
+	}
+}

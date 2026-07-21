@@ -17,7 +17,7 @@ const (
 	// caller names to invoke it.
 	CapabilityID = "stremio"
 	// moduleVersion is this module's own version, reported in its Manifest.
-	moduleVersion = "0.4.0"
+	moduleVersion = "0.5.0"
 	// providerScheme is the external-id scheme and source-binding provider the
 	// module keys content under: Stremio content is identified by IMDB id.
 	providerScheme = "imdb"
@@ -36,12 +36,13 @@ const (
 // declares in its Manifest. The assertions fail to compile if the module drifts
 // from what the Platform invokes or from a role it claims to fill (ADR 0027).
 var (
-	_ v1.Capability        = (*Capability)(nil)
-	_ v1.MetadataProvider  = (*Capability)(nil)
-	_ v1.SearchProvider    = (*Capability)(nil)
-	_ v1.CatalogProvider   = (*Capability)(nil)
-	_ v1.StreamProvider    = (*Capability)(nil)
-	_ v1.SubtitlesProvider = (*Capability)(nil)
+	_ v1.Capability         = (*Capability)(nil)
+	_ v1.MetadataProvider   = (*Capability)(nil)
+	_ v1.SearchProvider     = (*Capability)(nil)
+	_ v1.CatalogProvider    = (*Capability)(nil)
+	_ v1.StreamProvider     = (*Capability)(nil)
+	_ v1.SubtitlesProvider  = (*Capability)(nil)
+	_ v1.SettingsUIProvider = (*Capability)(nil)
 )
 
 // Capability is the Stremio addon-source module (ADR 0008's capability
@@ -126,7 +127,7 @@ func (c *Capability) clientFrom(settings []byte) (*Client, error) {
 func (c *Capability) Manifest() v1.Manifest {
 	return v1.Manifest{
 		ID: CapabilityID, Version: moduleVersion, Name: "Stremio addon source",
-		Provides: []v1.Role{v1.RoleMetadata, v1.RoleSearch, v1.RoleCatalog, v1.RoleStream, v1.RoleSubtitles},
+		Provides: []v1.Role{v1.RoleMetadata, v1.RoleSearch, v1.RoleCatalog, v1.RoleStream, v1.RoleSubtitles, v1.RoleSettingsUI},
 	}
 }
 
