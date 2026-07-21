@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	stremio "github.com/mosaic-media/mosaic-module-stremio"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	stremio "github.com/mosaic-media/module-stremio-addons"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // These tests run the capability against a hermetic fake Stremio addon over

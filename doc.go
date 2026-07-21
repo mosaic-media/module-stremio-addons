@@ -1,6 +1,6 @@
 // Package stremio is the Stremio addon-source module: the first official
 // optional Module, built exactly as a third party would build one. It is its
-// own Go module (github.com/mosaic-media/mosaic-module-stremio) importing only
+// own Go module (github.com/mosaic-media/module-stremio-addons) importing only
 // the published SDK (contracts/platform/v1) and the standard library, and it
 // is compiled into the Platform binary and invoked through the capability
 // registry (ADR 0007, ADR 0008).

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	stremio "github.com/mosaic-media/mosaic-module-stremio"
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	stremio "github.com/mosaic-media/module-stremio-addons"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 // These tests exercise the read provider roles (ADR 0027) against the hermetic

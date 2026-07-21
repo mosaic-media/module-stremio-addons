@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	v1 "github.com/mosaic-media/mosaic-sdk/contracts/platform/v1"
+	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
 const (

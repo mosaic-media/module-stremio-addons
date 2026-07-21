@@ -19,9 +19,9 @@ import (
 // dependency creeping in too (ADR 0008, ADR 0016, ADR 0025).
 func TestModuleImportsOnlyPublishedContracts(t *testing.T) {
 	const (
-		sdkPrefix      = "github.com/mosaic-media/mosaic-sdk/"
-		sduiPrefix     = "github.com/mosaic-media/mosaic-sdui/"
-		platformPrefix = "github.com/mosaic-media/mosaic-platform/"
+		sdkPrefix      = "github.com/mosaic-media/sdk/"
+		sduiPrefix     = "github.com/mosaic-media/sdui/"
+		platformPrefix = "github.com/mosaic-media/platform/"
 	)
 
 	entries, err := os.ReadDir(".")
