@@ -129,6 +129,13 @@ func browseSection(ctx context.Context, client *Client, userAddons []string, dis
 
 	cards := make([]sdui.Node, 0, len(entries))
 	for _, e := range entries {
+		// Only offer addons Mosaic can actually use — those that fill one of the
+		// provider roles it sources (metadata, catalog/search, stream, subtitles).
+		// This hides addon-catalog-only, UI-overlay and behaviour-only addons that
+		// would install but contribute nothing (ADR 0038).
+		if !usefulToMosaic(e.Manifest) {
+			continue
+		}
 		name := e.Manifest.Name
 		if name == "" {
 			name = e.TransportURL
@@ -141,7 +148,12 @@ func browseSection(ctx context.Context, client *Client, userAddons []string, dis
 		cards = append(cards, addonCard(name, e.Manifest.Logo, e.Manifest.Description,
 			sdui.Button("Install", "primary", sdui.Invoke("configureModule", configureInput(withNew, disableDefaults)))))
 	}
-	return sdui.Section("Browse addons", sdui.Child(sdui.Grid(sdui.Child(cards...))))
+	disclaimer := sdui.Banner("Mosaic doesn't support every Stremio addon. This list is filtered to likely-compatible ones, but addons are community-made — add them at your own risk.", sdui.ToneWarning)
+	if len(cards) == 0 {
+		return sdui.Section("Browse addons",
+			sdui.Child(disclaimer, sdui.EmptyState("collections", "No compatible addons to browse right now")))
+	}
+	return sdui.Section("Browse addons", sdui.Child(disclaimer, sdui.Grid(sdui.Child(cards...))))
 }
 
 // addonCard is one addon tile: a logo + name header, a clamped description, and
@@ -171,6 +183,50 @@ func addonCard(name, logo, description string, controls ...sdui.Node) sdui.Node 
 	return sdui.Component("Box",
 		sdui.Prop("style", map[string]any{"direction": "column", "gap": 2, "p": 4, "radius": "lg", "bg": "surface-raised", "border": true, "minHeight": 132}),
 		sdui.Child(children...))
+}
+
+// deniedAddonIDs is a curated deny-list of community addons that are not content
+// sources — mid-credits/jump-scare/clock overlays, debrid/VPN status panels,
+// watch-party, rich-presence and companion addons. They inject non-content
+// through the stream/meta/subtitles resources, so they are indistinguishable
+// from real sources by resource type (ADR 0038) and must be named to hide. It is
+// deliberately non-exhaustive — the browse disclaimer covers what it misses.
+var deniedAddonIDs = map[string]bool{
+	"com.almosteffective.aftercredits": true, // AfterCredits
+	"org.community.cast-search":        true, // Cast Search
+	"org.stremio.deepdivecompanion":    true, // Content Deep Dive Companion
+	"com.discussio":                    true, // Discussio
+	"imdb.ratings.local":               true, // IMDb Ratings (overlay)
+	"community.peario":                 true, // Peario (watch party)
+	"org.stinger.pro":                  true, // Stremio Stinger Pro
+	"community.watch.next":             true, // Watch Next
+	"org.stremio.doesTheDogDie":        true, // DoesTheDogDie
+	"org.stremio.wheresthejump":        true, // Where's The Jump
+	"community.aiostatus":              true, // AIOStatus
+	"a1337user.statusio.tv.compatible": true, // Statusio
+	"org.efnikolas.debridstatus":       true, // Debrid Status
+	"org.stremio.discordpresence":      true, // Discord Rich Presence
+	"org.vpn.iptest":                   true, // EfNikolas IP Test
+	"com.kepners.flashclock":           true, // Clockrr
+}
+
+// usefulToMosaic reports whether an addon is worth offering in browse: it fills a
+// provider role the Platform sources (metadata, catalog/search, stream,
+// subtitles — ADR 0027/0037) and is not on the curated deny-list of non-content
+// overlays/status addons. Compatibility is best-effort: Stremio has no field
+// separating a content source from an enhancement addon, so this is a heuristic
+// plus a named deny-list, with a disclaimer covering the rest (ADR 0038).
+func usefulToMosaic(m Manifest) bool {
+	if deniedAddonIDs[m.ID] {
+		return false
+	}
+	for _, r := range m.Resources {
+		switch r.Name {
+		case "catalog", "meta", "stream", "subtitles":
+			return true
+		}
+	}
+	return false
 }
 
 // without returns addons with the first occurrence of target removed. An empty

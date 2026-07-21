@@ -82,6 +82,38 @@ func TestDefaultAddonBundled(t *testing.T) {
 	}
 }
 
+// TestUsefulToMosaic pins the browse compatibility filter (ADR 0038): an addon
+// is offered only if it fills a role the Platform sources.
+func TestUsefulToMosaic(t *testing.T) {
+	useful := func(names ...string) Manifest {
+		m := Manifest{}
+		for _, n := range names {
+			m.Resources = append(m.Resources, ResourceDecl{Name: n})
+		}
+		return m
+	}
+	cases := []struct {
+		name string
+		m    Manifest
+		want bool
+	}{
+		{"meta", useful("meta"), true},
+		{"stream", useful("stream"), true},
+		{"subtitles only", useful("subtitles"), true},
+		{"catalog", useful("catalog"), true},
+		{"addon_catalog only", useful("addon_catalog"), false},
+		{"no resources", useful(), false},
+		{"unknown only", useful("something"), false},
+		{"mixed keeps", useful("addon_catalog", "stream"), true},
+		{"denied id despite content resource", Manifest{ID: "org.stremio.discordpresence", Resources: []ResourceDecl{{Name: "meta"}}}, false},
+	}
+	for _, tc := range cases {
+		if got := usefulToMosaic(tc.m); got != tc.want {
+			t.Errorf("usefulToMosaic(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 // TestClientSetsUserAgent pins that requests carry the module's own User-Agent
 // rather than Go's default, which Cloudflare-fronted addons reject with 403.
 // It also proves an addon configured by its manifest URL is reachable — the
