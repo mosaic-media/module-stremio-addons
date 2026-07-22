@@ -62,3 +62,63 @@ func TestInfoHashExtraction(t *testing.T) {
 		}
 	}
 }
+
+// TestSelectCandidatesSpansResolutions is the bug that cost the most time,
+// pinned. A flat head-of-list cap took the first N of a listing an aggregator
+// had ranked by quality descending — so it kept only the largest, least playable
+// releases and threw away every smaller one. Selection then had nothing it could
+// play, and the symptom reported was a browser rendering Dolby Vision as purple
+// and green.
+func TestSelectCandidatesSpansResolutions(t *testing.T) {
+	var listing []Stream
+	// The real shape: 4K first and plentiful, everything else below it.
+	for i := 0; i < 99; i++ {
+		listing = append(listing, Stream{Title: "Film 2160p HDR DV release " + string(rune('a'+i%26))})
+	}
+	for i := 0; i < 141; i++ {
+		listing = append(listing, Stream{Title: "Film 1080p x264 AAC release " + string(rune('a'+i%26))})
+	}
+	for i := 0; i < 38; i++ {
+		listing = append(listing, Stream{Title: "Film 720p x264 AAC release " + string(rune('a'+i%26))})
+	}
+
+	got := selectCandidates(listing)
+
+	counts := map[string]int{}
+	for _, s := range got {
+		counts[parseStreamMeta(s).quality]++
+	}
+	for _, q := range []string{"2160p", "1080p", "720p"} {
+		if counts[q] == 0 {
+			t.Errorf("no %s candidates kept: %v — a head-of-list cap is what produced this", q, counts)
+		}
+		if counts[q] > perQualityCandidates {
+			t.Errorf("%s kept %d, more than the per-quality cap %d", q, counts[q], perQualityCandidates)
+		}
+	}
+}
+
+// TestSelectCandidatesKeepsUnparsedReleases — the parse is best-effort, and a
+// release whose resolution it cannot read is not thereby a bad release.
+// Dropping those would repeat the same mistake on a different axis.
+func TestSelectCandidatesKeepsUnparsedReleases(t *testing.T) {
+	got := selectCandidates([]Stream{
+		{Title: "Film 1080p x264"},
+		{Title: "Some release with no resolution in its name"},
+	})
+	if len(got) != 2 {
+		t.Fatalf("kept %d of 2; an unparsed release must not be discarded", len(got))
+	}
+}
+
+// TestSelectCandidatesPreservesSourceOrderWithinAQuality — within one
+// resolution the source knows best, so its ranking must survive the sampling.
+func TestSelectCandidatesPreservesSourceOrderWithinAQuality(t *testing.T) {
+	got := selectCandidates([]Stream{
+		{Title: "first 1080p", BehaviorHints: behaviorHints{Filename: "a.mkv"}},
+		{Title: "second 1080p", BehaviorHints: behaviorHints{Filename: "b.mkv"}},
+	})
+	if len(got) != 2 || got[0].BehaviorHints.Filename != "a.mkv" {
+		t.Errorf("source order within a quality was not preserved: %+v", got)
+	}
+}

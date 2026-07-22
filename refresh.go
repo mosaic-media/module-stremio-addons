@@ -69,9 +69,7 @@ func (c *Capability) refreshItem(ctx context.Context, client *Client, svc v1.Con
 	if err != nil {
 		return fmt.Errorf("fetch streams for %s: %w", id, err)
 	}
-	if len(streams) > maxCandidates {
-		streams = streams[:maxCandidates]
-	}
+	streams = selectCandidates(streams)
 
 	// Continue the existing ordering rather than restarting at zero, so a
 	// refreshed candidate does not claim to be the source's top-ranked release

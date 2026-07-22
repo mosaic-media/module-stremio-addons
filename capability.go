@@ -17,7 +17,7 @@ const (
 	// caller names to invoke it.
 	CapabilityID = "stremio"
 	// moduleVersion is this module's own version, reported in its Manifest.
-	moduleVersion = "0.11.0"
+	moduleVersion = "0.12.0"
 	// providerScheme is the external-id scheme and source-binding provider the
 	// module keys content under: Stremio content is identified by IMDB id.
 	providerScheme = "imdb"
@@ -281,14 +281,7 @@ func (c *Capability) attachStream(ctx context.Context, client *Client, svc v1.Co
 	if err != nil {
 		return fmt.Errorf("fetch streams for %s: %w", id, err)
 	}
-	if len(streams) > maxCandidates {
-		// A bounded set, because an aggregator can return well over a hundred
-		// and the tail is duplicates and unusable releases. The source has
-		// already ranked them, so the head is the part worth keeping — and the
-		// cap is logged in the sense that it is stated here rather than being a
-		// silent truncation nobody can see (ADR 0049).
-		streams = streams[:maxCandidates]
-	}
+	streams = selectCandidates(streams)
 	for i, stream := range streams {
 		meta := parseStreamMeta(stream)
 		if _, err := svc.AttachContentPart(ctx, v1.AttachContentPartCommand{
