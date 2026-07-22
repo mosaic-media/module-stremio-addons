@@ -366,6 +366,18 @@ func (f *fakeContent) SearchContent(context.Context, v1.SearchContentQuery) (v1.
 func (f *fakeContent) GetContentNode(context.Context, v1.GetContentNodeQuery) (v1.GetContentNodeResult, error) {
 	return v1.GetContentNodeResult{}, nil
 }
+
+// ListContentParts reports back the parts the fake has been given, which is what
+// lets a refresh see its own previous writes.
+func (f *fakeContent) ListContentParts(_ context.Context, q v1.ListContentPartsQuery) (v1.ListContentPartsResult, error) {
+	var out []v1.Part
+	for _, p := range f.parts {
+		if p.NodeID == q.NodeID {
+			out = append(out, p)
+		}
+	}
+	return v1.ListContentPartsResult{Parts: out}, nil
+}
 func (f *fakeContent) RelateContent(context.Context, v1.RelateContentCommand) (v1.RelateContentResult, error) {
 	return v1.RelateContentResult{}, nil
 }

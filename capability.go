@@ -17,7 +17,7 @@ const (
 	// caller names to invoke it.
 	CapabilityID = "stremio"
 	// moduleVersion is this module's own version, reported in its Manifest.
-	moduleVersion = "0.10.0"
+	moduleVersion = "0.11.0"
 	// providerScheme is the external-id scheme and source-binding provider the
 	// module keys content under: Stremio content is identified by IMDB id.
 	providerScheme = "imdb"
@@ -157,12 +157,22 @@ func (c *Capability) Import(ctx context.Context, svc v1.ContentService, req v1.I
 		return v1.ImportResult{}, fmt.Errorf("no configured addon served metadata for %s/%s", typ, id)
 	}
 
-	// Search existing content: if this id already resolves to a work, return
-	// it rather than creating a second copy.
+	// Search existing content: if this id already resolves to a work, refresh
+	// its candidate releases rather than creating a second copy.
+	//
+	// It used to return here and do nothing else, which quietly stranded every
+	// item imported before the module stored a whole candidate set: a re-import
+	// was a no-op, so the item kept its single release forever and selection had
+	// nothing to choose between. That is indistinguishable, from outside, from
+	// selection being broken.
 	if existing, ok, err := c.find(ctx, svc, caller, id); err != nil {
 		return v1.ImportResult{}, err
 	} else if ok {
-		return v1.ImportResult{WorkID: existing, AlreadyKnown: true}, nil
+		result := v1.ImportResult{WorkID: existing, AlreadyKnown: true}
+		if err := c.refreshCandidates(ctx, client, svc, caller, existing, typ, id, &result); err != nil {
+			return v1.ImportResult{}, err
+		}
+		return result, nil
 	}
 
 	title := meta.Name
