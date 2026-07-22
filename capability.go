@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -356,12 +355,23 @@ func (c *Capability) Metadata(ctx context.Context, req v1.MetadataRequest) (v1.C
 	if !ok {
 		return v1.ContentMetadata{}, fmt.Errorf("no configured addon served metadata for %s/%s", req.Ref.NativeType, req.Ref.NativeID)
 	}
-	// Which source supplied what, logged once per lookup. A record assembled
+	// Which source supplied what, recorded once per lookup. A record assembled
 	// from several addons is the kind of thing that is hard to explain after the
 	// fact, and "the artwork came from Cinemeta because your first addon had
 	// none" is a far better answer than a shrug.
-	log.Printf("stremio: meta %s/%s — identity=%q artwork=%q contributors=%v",
-		req.Ref.NativeType, req.Ref.NativeID, prov.Identity, prov.Artwork, prov.Contributors)
+	//
+	// Through the SDK's telemetry rather than log.Printf: this lands in the
+	// Platform's records, attributed to this module, correlated with the request
+	// that caused it, and filterable. The addon names are the interesting part
+	// and they are a user's configuration — an addon URL can carry an API key —
+	// so they are classified rather than written verbatim. The type and id are
+	// a provider's own identifiers and are safe.
+	v1.TelemetryFrom(ctx).Info("metadata merged",
+		v1.String("native_type", req.Ref.NativeType),
+		v1.String("native_id", req.Ref.NativeID),
+		v1.Sensitive("identity_from", prov.Identity),
+		v1.Sensitive("artwork_from", prov.Artwork),
+		v1.Int("contributors", len(prov.Contributors)))
 	return v1.ContentMetadata{
 		Ref:      req.Ref,
 		Title:    meta.Name,
