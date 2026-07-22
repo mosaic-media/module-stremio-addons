@@ -17,7 +17,7 @@ const (
 	// caller names to invoke it.
 	CapabilityID = "stremio"
 	// moduleVersion is this module's own version, reported in its Manifest.
-	moduleVersion = "0.12.0"
+	moduleVersion = "0.13.0"
 	// providerScheme is the external-id scheme and source-binding provider the
 	// module keys content under: Stremio content is identified by IMDB id.
 	providerScheme = "imdb"
@@ -149,7 +149,7 @@ func (c *Capability) Import(ctx context.Context, svc v1.ContentService, req v1.I
 		return v1.ImportResult{}, fmt.Errorf("ref needs a native type and id, got type=%q id=%q", typ, id)
 	}
 
-	meta, ok, err := client.Meta(ctx, typ, id)
+	meta, ok, err := client.MetaMerged(ctx, typ, id)
 	if err != nil {
 		return v1.ImportResult{}, fmt.Errorf("fetch metadata: %w", err)
 	}
@@ -333,7 +333,7 @@ func (c *Capability) Metadata(ctx context.Context, req v1.MetadataRequest) (v1.C
 	if err != nil {
 		return v1.ContentMetadata{}, err
 	}
-	meta, ok, err := client.Meta(ctx, req.Ref.NativeType, req.Ref.NativeID)
+	meta, ok, err := client.MetaMerged(ctx, req.Ref.NativeType, req.Ref.NativeID)
 	if err != nil {
 		return v1.ContentMetadata{}, fmt.Errorf("fetch metadata: %w", err)
 	}

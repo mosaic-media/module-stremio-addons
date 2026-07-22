@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -321,31 +322,44 @@ func (c *Client) Meta(ctx context.Context, typ, id string) (Meta, bool, error) {
 // happened to be first. Only the resolved URL is perishable, and that is cached
 // separately.
 func (c *Client) Streams(ctx context.Context, typ, id string) ([]Stream, error) {
-	var out []Stream
-	for _, a := range c.addons {
-		if err := c.ensureManifest(ctx, a); err != nil {
-			continue
-		}
-		if !supports(a.manifest, "stream", typ, id) {
-			continue
-		}
-		var resp struct {
-			Streams []Stream `json:"streams"`
-		}
-		if err := c.getJSON(ctx, a.baseURL+"/stream/"+typ+"/"+id+".json", &resp); err != nil {
-			// One unwell addon must not blank the whole candidate list when
-			// another is answering.
-			continue
-		}
-		for _, s := range resp.Streams {
-			if s.Ref() != "" {
-				out = append(out, s)
+	// Results are collected per addon and concatenated in configuration order
+	// afterwards, so concurrency does not make the candidate ordering depend on
+	// which addon happened to answer first — selection ranks on that order.
+	per := make([][]Stream, len(c.addons))
+	var wg sync.WaitGroup
+	for i, a := range c.addons {
+		wg.Add(1)
+		go func(i int, a *resolvedAddon) {
+			defer wg.Done()
+			if err := c.ensureManifest(ctx, a); err != nil {
+				return
 			}
-		}
+			if !supports(a.manifest, "stream", typ, id) {
+				return
+			}
+			var resp struct {
+				Streams []Stream `json:"streams"`
+			}
+			if err := c.getJSON(ctx, a.baseURL+"/stream/"+typ+"/"+id+".json", &resp); err != nil {
+				// One unwell addon must not blank the candidate list when
+				// another is answering.
+				return
+			}
+			for _, st := range resp.Streams {
+				if st.Ref() != "" {
+					per[i] = append(per[i], st)
+				}
+			}
+		}(i, a)
+	}
+	wg.Wait()
+
+	var out []Stream
+	for _, list := range per {
+		out = append(out, list...)
 	}
 	return out, nil
 }
-
 func (c *Client) Stream(ctx context.Context, typ, id string) (Stream, bool, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
@@ -377,32 +391,54 @@ func (c *Client) Stream(ctx context.Context, typ, id string) (Stream, bool, erro
 // serves the subtitles resource for the type. It returns ok=false, no error,
 // when no configured addon serves subtitles (ADR 0037).
 func (c *Client) Subtitles(ctx context.Context, typ, id string) ([]Subtitle, bool, error) {
+	var (
+		mu  sync.Mutex
+		out []Subtitle
+		wg  sync.WaitGroup
+	)
 	for _, a := range c.addons {
-		if err := c.ensureManifest(ctx, a); err != nil {
-			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
-			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (ADR 0038).
-			continue
-		}
-		if !supports(a.manifest, "subtitles", typ, id) {
-			continue
-		}
-		var resp struct {
-			Subtitles []Subtitle `json:"subtitles"`
-		}
-		if err := c.getJSON(ctx, a.baseURL+"/subtitles/"+typ+"/"+id+".json", &resp); err != nil {
-			return nil, false, err
-		}
-		if len(resp.Subtitles) > 0 {
-			return resp.Subtitles, true, nil
-		}
+		wg.Add(1)
+		go func(a *resolvedAddon) {
+			defer wg.Done()
+			if err := c.ensureManifest(ctx, a); err != nil {
+				return
+			}
+			if !supports(a.manifest, "subtitles", typ, id) {
+				return
+			}
+			var resp struct {
+				Subtitles []Subtitle `json:"subtitles"`
+			}
+			if err := c.getJSON(ctx, a.baseURL+"/subtitles/"+typ+"/"+id+".json", &resp); err != nil {
+				return
+			}
+			mu.Lock()
+			out = append(out, resp.Subtitles...)
+			mu.Unlock()
+		}(a)
 	}
-	return nil, false, nil
+	wg.Wait()
+
+	out = dedupeSubtitles(out)
+	return out, len(out) > 0, nil
 }
 
-// Catalogs returns the catalog declarations across every configured addon, in
-// configuration order. It is the source's collection list — what the admin
-// collection browser enumerates before choosing what to publish.
+// dedupeSubtitles collapses tracks that are the same file in the same language.
+// Two addons proxying one subtitle source is common, and a language listed four
+// times is a worse track picker than a language listed once.
+func dedupeSubtitles(in []Subtitle) []Subtitle {
+	seen := make(map[string]bool, len(in))
+	out := in[:0]
+	for _, s := range in {
+		k := strings.ToLower(s.Lang) + "|" + s.URL
+		if s.URL == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, s)
+	}
+	return out
+}
 func (c *Client) Catalogs(ctx context.Context) ([]CatalogDecl, error) {
 	var out []CatalogDecl
 	for _, a := range c.addons {
