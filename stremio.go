@@ -844,7 +844,7 @@ func sizeToBytes(num, unit string) int64 {
 // just courtesy: Cloudflare-fronted addons (Torrentio and many popular stream
 // addons) reject Go's default "Go-http-client/1.1" User-Agent with a 403, while
 // any honest custom identifier is served. So this is set on every request.
-const userAgent = "mosaic-module-stremio/" + moduleVersion
+var userAgent = "mosaic-module-stremio/" + moduleVersion
 
 func (c *Client) getJSON(ctx context.Context, url string, out interface{}) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

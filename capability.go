@@ -17,8 +17,13 @@ const (
 	// CapabilityID is the id the Platform registers this module under and a
 	// caller names to invoke it.
 	CapabilityID = "stremio"
-	// moduleVersion is this module's own version, reported in its Manifest.
-	moduleVersion = "0.15.0"
+	// modulePath is this module's import path, which is how it looks its own
+	// version up in the build graph rather than carrying a constant that has to
+	// be remembered at release time (SDK v0.12.0). The constant this replaces
+	// had drifted across two releases — it read 0.7.0 while the repository was
+	// tagged v0.9.0, so the Platform logged a version that had not been true for
+	// months.
+	modulePath = "github.com/mosaic-media/module-stremio-addons"
 	// providerScheme is the external-id scheme and source-binding provider the
 	// module keys content under: Stremio content is identified by IMDB id.
 	providerScheme = "imdb"
@@ -32,6 +37,12 @@ const (
 	// disableDefaultAddons setting.
 	defaultAddon = "https://v3-cinemeta.strem.io/manifest.json"
 )
+
+// moduleVersion is resolved once from the build graph rather than maintained by
+// hand (SDK v0.12.0). A var rather than a const because it is a fact about the
+// binary, discovered at startup, not a literal — which is also why the constant
+// it replaces could drift: nothing forced it to agree with anything.
+var moduleVersion = v1.ModuleVersion(modulePath)
 
 // Capability satisfies the SDK's capability contract and every provider role it
 // declares in its Manifest. The assertions fail to compile if the module drifts
@@ -131,7 +142,7 @@ func (c *Capability) clientFrom(settings []byte) (*Client, error) {
 // resolves streams — the four Stremio addon resources.
 func (c *Capability) Manifest() v1.Manifest {
 	return v1.Manifest{
-		ID: CapabilityID, Version: moduleVersion, Name: "Stremio addon source",
+		ID: CapabilityID, Version: v1.ModuleVersion(modulePath), Name: "Stremio addon source",
 		Provides: []v1.Role{v1.RoleMetadata, v1.RoleSearch, v1.RoleCatalog, v1.RoleStream, v1.RoleSubtitles, v1.RoleSettingsUI},
 	}
 }
