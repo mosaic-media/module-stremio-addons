@@ -197,6 +197,11 @@ func (c *Capability) Import(ctx context.Context, svc v1.ContentService, req v1.I
 	work, err := svc.AddContentWork(ctx, v1.AddContentWorkCommand{
 		Caller: caller, MediaType: mediaTypeFor(typ), Title: title,
 		ExternalIDs: externalIDs(id),
+		// Store the art alongside the work so a list surface (the continue-
+		// watching rail) renders it without re-fetching metadata per card, and so
+		// it can later be user-overridden (ADR 0071). These are the same fields
+		// the metadata read already decodes.
+		Artwork: v1.Artwork{Poster: meta.Poster, Backdrop: meta.Background, Logo: meta.Logo},
 	})
 	if err != nil {
 		return v1.ImportResult{}, fmt.Errorf("create work: %w", err)

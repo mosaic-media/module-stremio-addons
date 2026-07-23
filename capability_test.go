@@ -385,4 +385,23 @@ func (f *fakeContent) ResolveContentBinding(context.Context, v1.ResolveContentBi
 	return v1.ResolveContentBindingResult{}, nil
 }
 
+// The playback-state surface (SDK v0.14.0). This module does not touch it — it
+// sources content, it does not consume playback — so the fake only has to
+// satisfy the interface the grown ContentService now declares.
+func (f *fakeContent) RecordPlaybackProgress(context.Context, v1.RecordPlaybackProgressCommand) (v1.RecordPlaybackProgressResult, error) {
+	return v1.RecordPlaybackProgressResult{}, nil
+}
+func (f *fakeContent) SetPlaybackFinished(context.Context, v1.SetPlaybackFinishedCommand) (v1.SetPlaybackFinishedResult, error) {
+	return v1.SetPlaybackFinishedResult{}, nil
+}
+func (f *fakeContent) GetPlaybackState(context.Context, v1.GetPlaybackStateQuery) (v1.GetPlaybackStateResult, error) {
+	return v1.GetPlaybackStateResult{}, nil
+}
+func (f *fakeContent) ListPlaybackStates(context.Context, v1.ListPlaybackStatesQuery) (v1.ListPlaybackStatesResult, error) {
+	return v1.ListPlaybackStatesResult{}, nil
+}
+func (f *fakeContent) ListInProgress(context.Context, v1.ListInProgressQuery) (v1.ListInProgressResult, error) {
+	return v1.ListInProgressResult{}, nil
+}
+
 var _ v1.ContentService = (*fakeContent)(nil)
