@@ -188,15 +188,21 @@ func (r *ResourceDecl) UnmarshalJSON(b []byte) error {
 // Logo/ImdbRating/Runtime/Cast/Links back the rich detail surface (ADR 0034);
 // Cinemeta provides them all — the module simply decoded none of them before.
 type Meta struct {
-	ID          string   `json:"id"`
-	Type        string   `json:"type"`
-	Name        string   `json:"name"`
-	Poster      string   `json:"poster"`
-	Background  string   `json:"background"`
-	Logo        string   `json:"logo"`
-	Description string   `json:"description"`
-	ReleaseInfo string   `json:"releaseInfo"`
-	Genres      []string `json:"genres"`
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Name       string `json:"name"`
+	Poster     string `json:"poster"`
+	Background string `json:"background"`
+	Logo       string `json:"logo"`
+	// LandscapePoster is wide key art an addon proxying a real artwork database
+	// returns beside the portrait poster. It is not part of the base Stremio meta
+	// shape — Cinemeta has no such field — so it is empty for sources that do not
+	// carry it, and translated here rather than left for the Platform to learn
+	// (ADR 0051).
+	LandscapePoster string   `json:"landscapePoster"`
+	Description     string   `json:"description"`
+	ReleaseInfo     string   `json:"releaseInfo"`
+	Genres          []string `json:"genres"`
 	// ImdbRating is Cinemeta's rating, a string ("8.0") in its API.
 	ImdbRating string `json:"imdbRating"`
 	// Runtime is a display string whose format varies ("120 min").
