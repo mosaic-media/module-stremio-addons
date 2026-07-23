@@ -60,11 +60,36 @@ The module reports the version that was **actually linked**, via
 `v1.ModuleVersion` reading the build graph — not a hand-maintained constant,
 which nothing forces to agree with anything.
 
+## Everything runs in the container, nothing runs on the host
+
+**Do not run `go build`, `go test`, `go vet` or `gofmt` directly on this
+machine.** This repository's gates run inside its test container:
+
+```bash
+docker compose -f docker-compose.test.yml run --rm test
+```
+
+That runs gofmt, `go build ./...`, `go vet ./...` and `go test ./...` against
+the Go version pinned in the compose file, which must stay equal to the one in
+`go.mod`. Append `bash` for a shell in the same environment.
+
+Two things it protects, and the second is particular to this module:
+
+- **The boundary.** This module compiles against the published SDK and the
+  standard library and nothing else, enforced by `boundary_test.go` parsing
+  every import. A host with a populated module cache, a leftover `go.work` or a
+  stray `replace` can satisfy an import a third party's machine could not, and
+  the boundary test still passes because the import resolved.
+- **Egress.** The tests that matter here reach real addons over TLS, and the
+  container has network and certificates on purpose. If those tests start
+  failing, check that before suspecting the addons: a slimmed image without
+  `ca-certificates` fails in a way that reads exactly like an addon being down.
+
 ## Workflow
 
 - Commit and push this repository **separately** from `platform`.
 - **Commit author identity** must be `AdamNi-7080 <anicholls41@gmail.com>`.
-- `gofmt`, `go build ./...`, `go vet ./...` and `go test ./...` before pushing.
+- The test container green before pushing.
 - Observability goes through the SDK's ambient `v1.Telemetry`
   ([ADR 0059](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0059-modules-observe-through-the-sdk.md)),
   reached as `TelemetryFrom(ctx)`. Do not print, and do not configure an

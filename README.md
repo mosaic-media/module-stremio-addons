@@ -47,15 +47,23 @@ to see a library at all, and add a stream addon as well if you want stream
 references. With only a metadata addon, an import is complete but has no
 streams — that is the meta-only case working as intended, not a failure.
 
-## Build
+## Build and test
 
-Requires a sibling checkout of `sdk` (a `replace` directive in `go.mod`
-points at `../sdk`) until the SDK is published.
+**Everything runs in a container; nothing is built or tested on the host.** The
+gate — gofmt, `go build`, `go vet`, `go test` — is one command:
 
+```bash
+docker compose -f docker-compose.test.yml run --rm test
 ```
-go build ./...
-go test ./...
-```
+
+Append `bash` for a shell in the same environment. The SDK is a **published**
+dependency resolved from the module proxy (`go.mod` requires it at a tagged
+version, no `replace`), so no sibling checkout is needed to build. The container
+resolves it exactly as a third party would — which is the point: this module
+compiles against the published SDK and the standard library and nothing else,
+and `boundary_test.go` enforces that by parsing every import. It also reaches
+real addons over TLS, so the container has network and certificates; if those
+tests start failing, check that before suspecting the addons.
 
 ## A note on Stremio
 

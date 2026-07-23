@@ -1,0 +1,63 @@
+# The Stremio addons module's test container.
+#
+#   docker compose -f docker-compose.test.yml run --rm test
+#
+# This is the sanctioned way to run this repository's gates. Nothing is built
+# or tested on the host.
+#
+# Two things this container is asserting, neither of which a host run asserts
+# reliably:
+#
+#   - **The boundary.** This module compiles against the published SDK and the
+#     standard library and nothing else, which boundary_test.go enforces by
+#     parsing every import. A host with a populated module cache and a stray
+#     `replace` can satisfy an import a third party's machine could not.
+#   - **Outbound network.** The bugs that mattered here — manifest-URL
+#     normalisation, and the missing User-Agent that made Cloudflare-fronted
+#     addons return 403 — were invisible against fakes and only appear against
+#     real addons. The container has egress; keep it that way rather than
+#     making those tests conditional.
+#
+# For a shell in the same environment:
+#
+#   docker compose -f docker-compose.test.yml run --rm test bash
+name: mosaic-stremio-addons-test
+
+services:
+  test:
+    # Pinned to go.mod's `go` directive. Bump both together.
+    image: golang:1.25-bookworm
+    working_dir: /src/module-stremio-addons
+    environment:
+      # The bind mount carries a .git the container has no business stat-ing,
+      # and Go fails the build on its ownership rather than degrading.
+      GOFLAGS: -buildvcs=false
+      # Certificates matter here in a way they do not in the other modules:
+      # the tests reach real addons over TLS. The image ships them; this line
+      # is a reminder that an image slimmed below ca-certificates breaks those
+      # tests in a way that reads as the addons being down.
+      SSL_CERT_DIR: /etc/ssl/certs
+    volumes:
+      - .:/src/module-stremio-addons
+      - mosaic-stremio-gomod:/go/pkg/mod
+      - mosaic-stremio-gobuild:/root/.cache/go-build
+    command:
+      - bash
+      - -eu
+      - -o
+      - pipefail
+      - -c
+      - |
+        gofmt -l . > /tmp/unformatted
+        if [ -s /tmp/unformatted ]; then
+          echo "These files are not gofmt-clean:" >&2
+          cat /tmp/unformatted >&2
+          exit 1
+        fi
+        go build ./...
+        go vet ./...
+        go test ./...
+
+volumes:
+  mosaic-stremio-gomod:
+  mosaic-stremio-gobuild:
