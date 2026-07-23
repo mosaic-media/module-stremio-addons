@@ -421,3 +421,118 @@ func (f *fakeContent) ListInProgress(context.Context, v1.ListInProgressQuery) (v
 }
 
 var _ v1.ContentService = (*fakeContent)(nil)
+
+// Being asked about content this module did not source (ADR 0073). The Platform
+// runs a stream-enrichment pass after any import, so these refs come from TMDB
+// and Cinemeta rather than from a Stremio search.
+
+func TestStreamsForARefThisModuleDidNotSource(t *testing.T) {
+	server := fakeAddon(withStreams)
+	defer server.Close()
+	cap := stremio.New(server.Client())
+	ctx := context.Background()
+
+	// What the Platform sends: a shared IMDB identity, the media type it owns,
+	// and no native id at all — because only this module knows how to build one.
+	film := v1.ContentRef{
+		Provider: "tmdb", MediaType: v1.MediaMovie,
+		ExternalScheme: "imdb", ExternalID: "tt1254207",
+	}
+	resp, err := cap.Streams(ctx, v1.StreamRequest{
+		Caller: v1.CallerFromSession("s-1"), Ref: film, Settings: addonSettings(server.URL),
+	})
+	if err != nil {
+		t.Fatalf("Streams for a foreign film ref: %v", err)
+	}
+	if len(resp.Streams) == 0 {
+		t.Fatal("no streams for a film addressed by its IMDB id")
+	}
+
+	// A series episode. The colon-separated id is composed here, not by the
+	// Platform, which is the point of passing coordinates as numbers.
+	series := v1.ContentRef{
+		Provider: "tmdb", MediaType: v1.MediaTVSeries,
+		ExternalScheme: "imdb", ExternalID: "tt0903747",
+	}
+	resp, err = cap.Streams(ctx, v1.StreamRequest{
+		Caller: v1.CallerFromSession("s-1"), Ref: series,
+		Season: 1, Episode: 2, Settings: addonSettings(server.URL),
+	})
+	if err != nil {
+		t.Fatalf("Streams for a foreign episode ref: %v", err)
+	}
+	if len(resp.Streams) == 0 {
+		t.Fatal("no streams for an episode addressed by IMDB id plus coordinates")
+	}
+}
+
+func TestStreamsDeclineUnusableRefsWithoutErroring(t *testing.T) {
+	server := fakeAddon(withStreams)
+	defer server.Close()
+	cap := stremio.New(server.Client())
+	ctx := context.Background()
+	settings := addonSettings(server.URL)
+
+	cases := map[string]v1.StreamRequest{
+		// A scheme Stremio addons do not speak.
+		"tmdb-keyed ref": {Ref: v1.ContentRef{
+			Provider: "tmdb", MediaType: v1.MediaMovie,
+			ExternalScheme: "tmdb", ExternalID: "335984",
+		}},
+		// A series as a whole has no stream; only its episodes do.
+		"series with no episode": {Ref: v1.ContentRef{
+			Provider: "tmdb", MediaType: v1.MediaTVSeries,
+			ExternalScheme: "imdb", ExternalID: "tt0903747",
+		}},
+		// Nothing addressable at all.
+		"empty ref": {Ref: v1.ContentRef{Provider: "tmdb"}},
+	}
+
+	for name, req := range cases {
+		req.Caller = v1.CallerFromSession("s-1")
+		req.Settings = settings
+
+		// Empty and no error, both times. The Platform asks every stream provider
+		// about content some other module sourced; an error here would fail a
+		// user's import over a title that was never this module's to know.
+		streams, err := cap.Streams(ctx, req)
+		if err != nil {
+			t.Errorf("%s: Streams returned an error rather than declining: %v", name, err)
+		}
+		if len(streams.Streams) != 0 {
+			t.Errorf("%s: returned %d streams for an unusable ref", name, len(streams.Streams))
+		}
+		subs, err := cap.Subtitles(ctx, v1.SubtitlesRequest{
+			Caller: req.Caller, Ref: req.Ref, Settings: settings,
+		})
+		if err != nil {
+			t.Errorf("%s: Subtitles returned an error rather than declining: %v", name, err)
+		}
+		if len(subs.Subtitles) != 0 {
+			t.Errorf("%s: returned subtitles for an unusable ref", name)
+		}
+	}
+}
+
+// The module's own refs must keep working exactly as before — a Stremio import
+// composes episode ids itself and passes them as NativeID.
+func TestStreamsStillHonourThisModulesOwnRefs(t *testing.T) {
+	server := fakeAddon(withStreams)
+	defer server.Close()
+	cap := stremio.New(server.Client())
+
+	resp, err := cap.Streams(context.Background(), v1.StreamRequest{
+		Caller: v1.CallerFromSession("s-1"),
+		Ref: v1.ContentRef{
+			Provider: "stremio", NativeID: "tt0903747:1:2", NativeType: "series",
+			MediaType: v1.MediaTVSeries, ExternalScheme: "imdb", ExternalID: "tt0903747",
+		},
+		Settings: addonSettings(server.URL),
+	})
+	if err != nil {
+		t.Fatalf("Streams: %v", err)
+	}
+	if len(resp.Streams) == 0 {
+		t.Fatal("a native ref stopped resolving")
+	}
+}

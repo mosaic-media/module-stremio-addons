@@ -547,7 +547,15 @@ func (c *Capability) Streams(ctx context.Context, req v1.StreamRequest) (v1.Stre
 	if err != nil {
 		return v1.StreamResponse{}, err
 	}
-	stream, ok, err := client.Stream(ctx, req.Ref.NativeType, req.Ref.NativeID)
+	typ, id, ok := addressOf(req.Ref, req.Season, req.Episode)
+	if !ok {
+		// Not a title this module can address. Normal rather than exceptional
+		// (ADR 0073): the Platform asks every stream provider about content some
+		// other module sourced, and erroring here would fail a user's import over
+		// a title that was never Stremio's to know.
+		return v1.StreamResponse{}, nil
+	}
+	stream, ok, err := client.Stream(ctx, typ, id)
 	if err != nil {
 		return v1.StreamResponse{}, fmt.Errorf("resolve streams: %w", err)
 	}
@@ -580,7 +588,19 @@ func (c *Capability) Subtitles(ctx context.Context, req v1.SubtitlesRequest) (v1
 	if err != nil {
 		return v1.SubtitlesResponse{}, err
 	}
-	subs, ok, err := client.Subtitles(ctx, req.Ref.NativeType, req.Ref.NativeID)
+	// Zero coordinates, deliberately. SubtitlesRequest carries none: the
+	// Platform's enrichment pass (ADR 0073) resolves streams, not subtitles,
+	// because subtitles still have no consumer — the player is deferred (ADR
+	// 0037). So this is only ever called with this module's own ref, and
+	// addressOf is used rather than the raw fields purely so a foreign ref is
+	// *declined* instead of turning into a request with two empty strings in it.
+	// When a player lands and subtitles need enriching too, SubtitlesRequest
+	// grows the same coordinates and this passes them through.
+	typ, id, ok := addressOf(req.Ref, 0, 0)
+	if !ok {
+		return v1.SubtitlesResponse{}, nil
+	}
+	subs, ok, err := client.Subtitles(ctx, typ, id)
 	if err != nil {
 		return v1.SubtitlesResponse{}, fmt.Errorf("resolve subtitles: %w", err)
 	}
@@ -592,6 +612,52 @@ func (c *Capability) Subtitles(ctx context.Context, req v1.SubtitlesRequest) (v1
 		out = append(out, v1.Subtitle{Language: s.Lang, URL: s.URL, ID: s.ID})
 	}
 	return v1.SubtitlesResponse{Subtitles: out}, nil
+}
+
+// addressOf works out how to ask an addon about the item a request names,
+// whether or not this module is the one that sourced it.
+//
+// **This is the anti-corruption layer doing its actual job** (ADR 0051, ADR
+// 0073). Two shapes of request arrive here now:
+//
+//   - The module's own ref, from a Stremio search or import. NativeID and
+//     NativeType are already Stremio's, and are used as they are.
+//   - A ref another module produced — TMDB or Cinemeta describing the title —
+//     carrying a *shared* external identity and no native id at all. Stremio
+//     keys everything on IMDB ids, so an `imdb` identity is directly usable; the
+//     content type comes from the Platform's media type, and an episode's id is
+//     composed here as `<series>:<season>:<episode>`.
+//
+// That last string is why the coordinates are passed as numbers rather than the
+// Platform building the id: the colon-separated form is Stremio's convention and
+// nothing outside this file should know it.
+//
+// It reports false when there is nothing usable, which is a normal answer.
+func addressOf(ref v1.ContentRef, season, episode int) (typ, id string, ok bool) {
+	// The module's own ref: already addressed, including an episode id a
+	// previous call composed.
+	if ref.NativeID != "" && ref.NativeType != "" {
+		return ref.NativeType, ref.NativeID, true
+	}
+
+	// A foreign ref. Only an IMDB identity is usable — it is the only scheme
+	// Stremio addons speak.
+	if ref.ExternalScheme != providerScheme || ref.ExternalID == "" {
+		return "", "", false
+	}
+
+	switch ref.MediaType {
+	case v1.MediaMovie:
+		return "movie", ref.ExternalID, true
+	case v1.MediaTVSeries, v1.MediaAnimeSeries:
+		if episode <= 0 {
+			// A series as a whole has no stream; only its episodes do.
+			return "", "", false
+		}
+		return "series", fmt.Sprintf("%s:%d:%d", ref.ExternalID, season, episode), true
+	default:
+		return "", "", false
+	}
 }
 
 // refFrom builds a ContentRef from a catalog/search preview. Stremio content is
