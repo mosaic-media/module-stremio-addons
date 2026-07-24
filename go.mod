@@ -24,6 +24,6 @@ require (
 )
 
 require (
-	github.com/mosaic-media/sdk/host v0.1.0
+	github.com/mosaic-media/sdk/host v0.3.0
 	google.golang.org/protobuf v1.36.11 // indirect
 )

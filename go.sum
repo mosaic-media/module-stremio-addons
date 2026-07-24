@@ -36,8 +36,8 @@ github.com/mosaic-media/contracts v0.14.0 h1:z+3T4ZP84zOYrcozsMF4lrbuSsGVRU+u3gd
 github.com/mosaic-media/contracts v0.14.0/go.mod h1:PTcqIYfXR9ATnb2ihAWD2sfg4+Tjihne7yIDfJwXUJ0=
 github.com/mosaic-media/sdk v0.21.0 h1:UTEYF4D2CGvCrW6cimH5IZpRIY9/sNjvZCSjmIgXKiw=
 github.com/mosaic-media/sdk v0.21.0/go.mod h1:E+B7qxfjCSmymJPnBHN2/j38aM9+qAJbdaTVZBHHuyQ=
-github.com/mosaic-media/sdk/host v0.1.0 h1:pRemLuzODXUScvsbn8woXNpKOOUqECkN6zzJVzdu2LQ=
-github.com/mosaic-media/sdk/host v0.1.0/go.mod h1:xh+T2RcvR069YOAFhwmN4ht1f+S8OiXKYAZwuv00Zq0=
+github.com/mosaic-media/sdk/host v0.3.0 h1:TQcKa80tQszoSDjDkxbIsayvqqf03S4JXzt7lspnx1s=
+github.com/mosaic-media/sdk/host v0.3.0/go.mod h1:xh+T2RcvR069YOAFhwmN4ht1f+S8OiXKYAZwuv00Zq0=
 github.com/oklog/run v1.1.0 h1:GEenZ1cK0+q0+wsJew9qUg/DyD8k3JzYsZAi5gYi2mA=
 github.com/oklog/run v1.1.0/go.mod h1:sVPdnTZT1zYwAJeCMu2Th4T21pA3FPOQRfWjQlk7DVU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
