@@ -151,6 +151,9 @@ func (c *Capability) clientFrom(settings []byte) (*Client, error) {
 func (c *Capability) Manifest() v1.Manifest {
 	return v1.Manifest{
 		ID: CapabilityID, Version: v1.ModuleVersion(modulePath), Name: "Stremio addon source",
+		Description: "A host for Stremio addons: paste an addon's manifest URL and Mosaic sources " +
+			"from it. The addon ecosystem is community-made and unreviewed, so what this module can " +
+			"reach is whatever you choose to add to it.",
 		Provides: []v1.Role{v1.RoleMetadata, v1.RoleSearch, v1.RoleCatalog, v1.RoleStream, v1.RoleSubtitles, v1.RoleSettingsUI},
 	}
 }
