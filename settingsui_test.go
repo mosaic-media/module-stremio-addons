@@ -14,8 +14,8 @@ import (
 )
 
 // TestSettingsUIRendersSections proves the module contributes a settings screen
-// (ADR 0038): a Screen carrying the add-by-URL form (a SubmitField whose action
-// carries the "$value" placeholder and configureModule), the installed addon
+// (ADR 0038): a Screen carrying the add-by-URL form (a Form whose named field
+// writes addAddon and whose submit carries configureModule), the installed addon
 // with a Remove control, and a browse grid of installable addons.
 //
 // The browse section also consults Stremio's official addon directory, which the
@@ -50,7 +50,7 @@ func TestSettingsUIRendersSections(t *testing.T) {
 	// logo, a Configure control since it declares configurable, and Remove), and
 	// a Grid layout (ADR 0038 improvements).
 	for _, want := range []string{
-		"SubmitField", "$value", "configureModule", "Add an addon", "Installed addons",
+		"Form", "TextInput", "addAddon", "submit", "configureModule", "Add an addon", "Installed addons",
 		"Fake Addon", "http://fake/logo.png", "Configure", "Remove", "Grid", "Browse addons",
 		// The browse grid is populated from the addon directory, not an empty
 		// state — this is the surface the bundled default used to provide and

@@ -95,6 +95,20 @@ func New(httpClient *http.Client) *Capability {
 // addons named — with no migration to run.
 type moduleSettings struct {
 	Addons []string `json:"addons"`
+	// AddAddon is a pending addition: one URL the settings form just submitted.
+	//
+	// It exists because a form submits *values* — it writes a named field into
+	// the settings document — and adding to a list is not writing a field. The
+	// mechanism it replaces (a literal "$value" substituted into the action)
+	// could append because it rewrote the whole document on the way out; a named
+	// field cannot. So the document carries the addition and this module folds
+	// it in, which keeps the append inside the module rather than putting a list
+	// operation on the wire for every client to implement identically.
+	//
+	// It never needs clearing and is not a migration: the form's action always
+	// carries the already-folded list, so the next submit's Addons already
+	// contains the previous AddAddon, and the fold dedupes.
+	AddAddon string `json:"addAddon"`
 }
 
 // addonsFrom parses the module's settings document into a clean addon list.
@@ -107,10 +121,14 @@ func addonsFrom(settings []byte) ([]string, error) {
 		return nil, fmt.Errorf("parse module settings: %w", err)
 	}
 	var out []string
-	for _, a := range s.Addons {
-		if t := strings.TrimSpace(a); t != "" {
-			out = append(out, t)
+	seen := map[string]bool{}
+	for _, a := range append(append([]string{}, s.Addons...), s.AddAddon) {
+		t := strings.TrimSpace(a)
+		if t == "" || seen[t] {
+			continue
 		}
+		seen[t] = true
+		out = append(out, t)
 	}
 	return out, nil
 }

@@ -3,6 +3,7 @@ package stremio
 import (
 	"context"
 
+	"github.com/mosaic-media/contracts/sdui"
 	"github.com/mosaic-media/contracts/ui"
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
@@ -52,19 +53,30 @@ func (c *Capability) SettingsUI(ctx context.Context, req v1.SettingsUIRequest) (
 // configureInput builds the configureModule invoke input for a given addon list
 // — the complete settings document the Platform persists.
 func configureInput(addons []string) map[string]any {
-	return map[string]any{"moduleId": CapabilityID, "settings": map[string]any{"addons": addons}}
+	// addAddon is always written, and empty unless a form fills it. Every action
+	// that is not the add form — removing an addon, say — therefore clears the
+	// pending addition rather than silently re-adding it on the next read.
+	return map[string]any{"moduleId": CapabilityID, "settings": map[string]any{
+		"addons": addons, "addAddon": "",
+	}}
 }
 
-// addAddonSection is the add-by-URL form: a SubmitField whose action carries the
-// existing addons plus the "$value" placeholder the runtime fills with the typed
-// manifest URL (ADR 0038).
+// addAddonSection is the add-by-URL form (ADR 0088).
+//
+// The action carries the addons that already exist; the form's scope contributes
+// the one being added, under `addAddon`. A form writes named fields and cannot
+// append to a list, so the append happens where it is cheap — in this module's
+// own reading of its settings — rather than as a list operation on the wire that
+// every client would have to implement identically.
 func addAddonSection(addons []string) *ui.Element {
-	withNew := append(append([]string{}, addons...), "$value")
-	field := ui.Component("SubmitField",
-		ui.Prop("placeholder", "Paste an addon manifest URL…"),
-		ui.Prop("submitLabel", "Add"),
-		ui.OnTap(ui.Invoke("configureModule", configureInput(withNew))),
-	)
+	field := ui.Form(
+		ui.Vars(sdui.Vars(sdui.Var("addAddon", sdui.VarString, ""))),
+		ui.SubmitLabel("Add"),
+		ui.SubmitAction(ui.Submit(ui.Invoke("configureModule", configureInput(addons)), "settings")),
+		ui.TextInput(
+			ui.Prop("name", "addAddon"),
+			ui.Prop("placeholder", "Paste an addon manifest URL…"),
+			ui.Prop("validators", map[string]any{"required": true, "pattern": "^(https?://|stremio://)"})))
 	return ui.Section("Add an addon", field)
 }
 
