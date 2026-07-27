@@ -673,17 +673,29 @@ func (c *Capability) Streams(ctx context.Context, req v1.StreamRequest) (v1.Stre
 	return v1.StreamResponse{Streams: []v1.StreamLink{streamLinkFrom(stream)}}, nil
 }
 
-// streamLinkFrom maps a Stremio stream to the SDK StreamLink, parsing the release
-// detail (quality, size, seeders) a source-picker will rank on (ADR 0037).
+// streamLinkFrom maps a Stremio stream to the SDK StreamLink, carrying the
+// release detail parsed at this boundary (ADR 0037, ADR 0051) so a consumer
+// ranks on typed fields rather than re-deriving them from a URL.
+//
+// Every field parseStreamMeta works out now has somewhere to go except the
+// nominal dimensions, which StreamLink expresses as Quality. Until SDK v0.26.0
+// the container and the two codecs had nowhere at all, so this narrowed the
+// parse to quality, size and seeders on the way out and the same walk over the
+// same text produced a richer answer for a Part than for a link — which is
+// exactly the leak ADR 0051 names, since the only place left to recover them
+// was the URL.
 func streamLinkFrom(stream Stream) v1.StreamLink {
 	meta := parseStreamMeta(stream)
 	return v1.StreamLink{
-		Label:     stream.Name,
-		Title:     stream.Title,
-		Quality:   meta.quality,
-		SizeBytes: meta.sizeBytes,
-		Seeders:   meta.seeders,
-		Location:  v1.MediaLocation{Scheme: v1.RemoteLocation, Provider: streamProvider, Ref: stream.Ref()},
+		Label:      stream.Name,
+		Title:      stream.Title,
+		Quality:    meta.quality,
+		SizeBytes:  meta.sizeBytes,
+		Seeders:    meta.seeders,
+		Location:   v1.MediaLocation{Scheme: v1.RemoteLocation, Provider: streamProvider, Ref: stream.Ref()},
+		Container:  meta.container,
+		VideoCodec: meta.videoCodec,
+		AudioCodec: meta.audioCodec,
 	}
 }
 
@@ -696,15 +708,12 @@ func (c *Capability) Subtitles(ctx context.Context, req v1.SubtitlesRequest) (v1
 	if err != nil {
 		return v1.SubtitlesResponse{}, err
 	}
-	// Zero coordinates, deliberately. SubtitlesRequest carries none: the
-	// Platform's enrichment pass (ADR 0073) resolves streams, not subtitles,
-	// because subtitles still have no consumer — the player is deferred (ADR
-	// 0037). So this is only ever called with this module's own ref, and
-	// addressOf is used rather than the raw fields purely so a foreign ref is
-	// *declined* instead of turning into a request with two empty strings in it.
-	// When a player lands and subtitles need enriching too, SubtitlesRequest
-	// grows the same coordinates and this passes them through.
-	typ, id, ok := addressOf(req.Ref, 0, 0)
+	// The request's own coordinates, since SDK v0.26.0 carries them. They were
+	// two literal zeroes until then, which meant a foreign ref could only ever
+	// be addressed as a film: addressOf composes an episode id as
+	// `<series>:<season>:<episode>`, and with zeroes there was nothing to
+	// compose from. Same call, same helper, and the dialect stays in addressOf.
+	typ, id, ok := addressOf(req.Ref, req.Season, req.Episode)
 	if !ok {
 		return v1.SubtitlesResponse{}, nil
 	}

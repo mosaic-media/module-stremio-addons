@@ -166,6 +166,68 @@ func TestStreamsCarryReleaseDetail(t *testing.T) {
 	if s.SizeBytes != 2_300_000_000 {
 		t.Errorf("sizeBytes = %d, want 2.3e9", s.SizeBytes)
 	}
+	// The container and the two codecs (SDK v0.26.0). These were parsed and then
+	// dropped: StreamLink had nowhere to put them, so the same walk over the same
+	// text produced a richer answer for a Part than for a link, and the only
+	// place left to recover them was the URL — the leak ADR 0051 exists to stop.
+	// They are what ADR 0048's playability decision reads, so an empty one here
+	// is not neutral.
+	if s.Container != "mkv" {
+		t.Errorf("container = %q, want mkv", s.Container)
+	}
+	if s.VideoCodec != "h264" {
+		t.Errorf("videoCodec = %q, want h264 — spelled as ffprobe spells it, not as the release names it", s.VideoCodec)
+	}
+	if s.AudioCodec != "dts" {
+		t.Errorf("audioCodec = %q, want dts", s.AudioCodec)
+	}
+}
+
+// A link and the Part the same stream would be attached as must agree, because
+// they are the same parse: the fields exist on StreamLink so a consumer reading
+// a candidate sees what a consumer reading a Part sees. They disagreed for the
+// whole time StreamLink had nowhere to put them, and nothing reported it.
+func TestStreamLinkAgreesWithTheAttachedPart(t *testing.T) {
+	server := fakeAddon(withStreams)
+	defer server.Close()
+	cap := stremio.New(server.Client())
+	settings := addonSettings(server.URL)
+	ctx := context.Background()
+
+	resp, err := cap.Streams(ctx, v1.StreamRequest{
+		Caller: v1.CallerFromSession("s-1"), Settings: settings, Ref: movieRef("tt1254207"),
+	})
+	if err != nil {
+		t.Fatalf("Streams: %v", err)
+	}
+	if len(resp.Streams) != 1 {
+		t.Fatalf("streams = %d, want 1", len(resp.Streams))
+	}
+	link := resp.Streams[0]
+
+	content := newFakeContent()
+	if _, err := cap.Import(ctx, content, v1.ImportRequest{
+		Caller: v1.CallerFromSession("s-1"), Settings: settings, Ref: movieRef("tt1254207"),
+	}); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if len(content.parts) == 0 {
+		t.Fatal("import attached no parts, so there is nothing to compare against")
+	}
+	part := content.parts[0]
+
+	if link.Container != part.Container {
+		t.Errorf("container: link %q, part %q", link.Container, part.Container)
+	}
+	if link.VideoCodec != part.VideoCodec {
+		t.Errorf("videoCodec: link %q, part %q", link.VideoCodec, part.VideoCodec)
+	}
+	if link.AudioCodec != part.AudioCodec {
+		t.Errorf("audioCodec: link %q, part %q", link.AudioCodec, part.AudioCodec)
+	}
+	if link.SizeBytes != part.SizeBytes {
+		t.Errorf("sizeBytes: link %d, part %d", link.SizeBytes, part.SizeBytes)
+	}
 }
 
 func TestSubtitlesResolve(t *testing.T) {

@@ -3,8 +3,8 @@ module github.com/mosaic-media/module-stremio-addons
 go 1.25.0
 
 require (
-	github.com/mosaic-media/contracts v0.57.0
-	github.com/mosaic-media/sdk v0.25.0
+	github.com/mosaic-media/contracts v0.60.0
+	github.com/mosaic-media/sdk v0.26.0
 )
 
 require (
@@ -24,6 +24,6 @@ require (
 )
 
 require (
-	github.com/mosaic-media/sdk/host v0.7.0
+	github.com/mosaic-media/sdk/host v0.8.0
 	google.golang.org/protobuf v1.36.11 // indirect
 )

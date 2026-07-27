@@ -281,8 +281,15 @@ func fakeAddon(mode addonMode) *httptest.Server {
 			writeJSON(w, map[string]interface{}{"streams": []map[string]interface{}{
 				{
 					"name":  "Fake",
-					"title": "Movie.Name.2017.1080p.BluRay.x264\n👤 45 💾 2.3 GB ⚙️ Source",
+					"title": "Movie.Name.2017.1080p.BluRay.x264.DTS-HD.MA.5.1\n👤 45 💾 2.3 GB ⚙️ Source",
 					"url":   "http://cdn.example/" + strings.TrimSuffix(path[len("/stream/"):], ".json"),
+					// A filename, because that is where a container is read from:
+					// release text names containers far less reliably than it
+					// names codecs, and an addon that gives no filename leaves
+					// the field empty rather than guessing.
+					"behaviorHints": map[string]interface{}{
+						"filename": "Movie.Name.2017.1080p.BluRay.x264.DTS-HD.MA.5.1.mkv",
+					},
 				},
 			}})
 		case strings.HasPrefix(path, "/addon_catalog/"):
@@ -370,10 +377,19 @@ func (f *fakeContent) AddContentChild(_ context.Context, cmd v1.AddContentChildC
 	return v1.AddContentChildResult{Node: n}, nil
 }
 
+// The technical fields are carried across rather than dropped. They were
+// dropped, and that made the fake unable to observe the thing this module is
+// most responsible for: it fills Container, VideoCodec and AudioCodec at the
+// boundary (ADR 0051) precisely because an empty one is not neutral downstream,
+// and a fake that discarded them meant no test here could tell a filled field
+// from an empty one.
 func (f *fakeContent) AttachContentPart(_ context.Context, cmd v1.AttachContentPartCommand) (v1.AttachContentPartResult, error) {
 	p := v1.Part{
 		ID: v1.PartID(f.nextID("part")), NodeID: cmd.NodeID,
 		Role: cmd.Role, Location: cmd.Location,
+		EditionLabel: cmd.EditionLabel, NaturalOrder: cmd.NaturalOrder,
+		Container: cmd.Container, VideoCodec: cmd.VideoCodec, AudioCodec: cmd.AudioCodec,
+		Width: cmd.Width, Height: cmd.Height, SizeBytes: cmd.SizeBytes,
 	}
 	f.parts = append(f.parts, p)
 	return v1.AttachContentPartResult{Part: p}, nil
