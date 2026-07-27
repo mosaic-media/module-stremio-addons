@@ -127,6 +127,47 @@ type CatalogDecl struct {
 // ExtraDecl is one accepted catalog parameter.
 type ExtraDecl struct {
 	Name string `json:"name"`
+	// Options are the values the parameter accepts, when the addon says. An
+	// extra with none is a free-text parameter (`search`) or one whose values
+	// the caller must already hold (`lastVideosIds`); either way it cannot back
+	// a control built from a declared list, so it is not offered as a filter.
+	Options []string `json:"options"`
+	// IsRequired is whether a listing *cannot be fetched* without this
+	// parameter. It is read so a catalog that needs an argument a browse surface
+	// cannot invent is skipped rather than rendered as a row that answers
+	// nothing.
+	IsRequired bool `json:"isRequired"`
+}
+
+// GenreOptions returns the values the catalog's `genre` extra accepts, empty
+// when it declares none.
+//
+// **`genre` is the protocol's one general-purpose narrowing, and addons use it
+// for whatever they like.** Cinemeta puts *years* under it. That is fine here
+// precisely because the values are declared: the options are shown as labels and
+// sent back verbatim, and nothing in Mosaic ever has to decide what they mean.
+func (c CatalogDecl) GenreOptions() []string {
+	for _, e := range c.Extra {
+		if e.Name == filterGenre {
+			return e.Options
+		}
+	}
+	return nil
+}
+
+// RequiresAnArgument reports whether the catalog declares an extra it cannot be
+// listed without.
+func (c CatalogDecl) RequiresAnArgument() bool {
+	for _, e := range c.Extra {
+		// `search` being required means the catalog is a search endpoint rather
+		// than a browsable listing, and `genre` being required means the addon
+		// has hidden a mandatory argument behind the general-purpose name — both
+		// are catalogs a browse surface addressing an id alone cannot serve.
+		if e.IsRequired {
+			return true
+		}
+	}
+	return false
 }
 
 // SupportsSearch reports whether the catalog accepts a search query.
@@ -492,7 +533,22 @@ func (c *Client) Catalogs(ctx context.Context) ([]CatalogDecl, error) {
 // declares a catalog of that type and id. skip pages through a large catalog
 // (0 for the first page). It returns nil, no error, when no configured addon
 // declares the catalog.
-func (c *Client) CatalogItems(ctx context.Context, typ, id string, skip int) ([]MetaPreview, error) {
+// catalogPage is the page size the addon protocol documents for a catalog
+// listing, and the only basis this module has for saying whether another page
+// exists — no addon reports a total.
+const catalogPage = 100
+
+// CatalogItems lists one catalog's entries, from the first addon whose manifest
+// declares a catalog of that type and id. skip pages through a large catalog
+// (0 for the first page), and genre narrows it when non-empty — the caller has
+// already checked the value against what that catalog declared. It returns nil,
+// no error, when no configured addon declares the catalog.
+//
+// It also reports whether another page exists. That is the **weaker** of the two
+// statements SDK v0.25.0 describes — a full page rather than a reported total —
+// and it is still the provider's to make, because only the provider knows the
+// page size. Its cost is one empty fetch at the end of an exactly-full catalog.
+func (c *Client) CatalogItems(ctx context.Context, typ, id, genre string, skip int) ([]MetaPreview, bool, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
 			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
@@ -504,19 +560,46 @@ func (c *Client) CatalogItems(ctx context.Context, typ, id string, skip int) ([]
 			continue
 		}
 		u := a.baseURL + "/catalog/" + typ + "/" + id
+		// Extras are path segments, `name=value` joined by `&`, before the
+		// `.json`. The value is path-escaped: a genre is somebody else's
+		// vocabulary and "Sci-Fi & Fantasy" is a real one, which unescaped would
+		// read as a second extra.
+		var extras []string
+		if genre != "" {
+			extras = append(extras, filterGenre+"="+url.PathEscape(genre))
+		}
 		if skip > 0 {
-			u += "/skip=" + strconv.Itoa(skip)
+			extras = append(extras, "skip="+strconv.Itoa(skip))
+		}
+		if len(extras) > 0 {
+			u += "/" + strings.Join(extras, "&")
 		}
 		u += ".json"
 		var resp struct {
 			Metas []MetaPreview `json:"metas"`
 		}
 		if err := c.getJSON(ctx, u, &resp); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return resp.Metas, nil
+		return resp.Metas, len(resp.Metas) >= catalogPage, nil
 	}
-	return nil, nil
+	return nil, false, nil
+}
+
+// catalogDeclFor finds the declaration a listing would be served from, which is
+// what the caller validates a selected filter against.
+func (c *Client) catalogDeclFor(ctx context.Context, typ, id string) (CatalogDecl, bool) {
+	for _, a := range c.addons {
+		if err := c.ensureManifest(ctx, a); err != nil {
+			continue
+		}
+		for _, cat := range a.manifest.Catalogs {
+			if cat.Type == typ && cat.ID == id {
+				return cat, true
+			}
+		}
+	}
+	return CatalogDecl{}, false
 }
 
 // Search queries every search-capable catalog across every configured addon and

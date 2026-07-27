@@ -235,6 +235,11 @@ func (c *Capability) Import(ctx context.Context, svc v1.ContentService, req v1.I
 			Poster: meta.Poster, Landscape: meta.LandscapePoster,
 			Backdrop: meta.Background, Logo: meta.Logo,
 		},
+		// Genres, for the same reason and on the same terms as the artwork above:
+		// a facet is a question asked across the whole library and cannot be
+		// answered by a round trip per title. The addon's own words, unreconciled
+		// against any other source's (SDK v0.25.0).
+		Genres: meta.Genres,
 	})
 	if err != nil {
 		return v1.ImportResult{}, fmt.Errorf("create work: %w", err)
@@ -534,7 +539,15 @@ func (c *Capability) Catalogs(ctx context.Context, req v1.CatalogsRequest) (v1.C
 	}
 	cats := make([]v1.Catalog, 0, len(decls))
 	for _, d := range decls {
-		cats = append(cats, v1.Catalog{ID: d.ID, NativeType: d.Type, Name: catalogName(d)})
+		// A catalog that cannot be listed without an argument is not a browsable
+		// collection: the surface addresses a catalog by id and has nothing to
+		// supply. Offering it produces a row that answers nothing, every time.
+		if d.RequiresAnArgument() {
+			continue
+		}
+		cats = append(cats, v1.Catalog{
+			ID: d.ID, NativeType: d.Type, Name: catalogName(d), Filters: filtersFor(d),
+		})
 	}
 	return v1.CatalogsResponse{Catalogs: cats}, nil
 }
@@ -546,7 +559,18 @@ func (c *Capability) CatalogItems(ctx context.Context, req v1.CatalogItemsReques
 	if err != nil {
 		return v1.CatalogItemsResponse{}, err
 	}
-	metas, err := client.CatalogItems(ctx, req.NativeType, req.CatalogID, req.Skip)
+
+	// The selection is checked against the same declaration Catalogs handed out.
+	// **An addon answers an unknown genre with the unfiltered listing**, so a
+	// value passed through unchecked returns a plausible page for a question
+	// nobody asked — and unlike a missing control, a user cannot see that. So an
+	// undeclared filter is refused rather than dropped.
+	genre, err := narrowingFor(ctx, client, req)
+	if err != nil {
+		return v1.CatalogItemsResponse{}, err
+	}
+
+	metas, hasMore, err := client.CatalogItems(ctx, req.NativeType, req.CatalogID, genre, req.Skip)
 	if err != nil {
 		return v1.CatalogItemsResponse{}, fmt.Errorf("list catalog items: %w", err)
 	}
@@ -556,7 +580,70 @@ func (c *Capability) CatalogItems(ctx context.Context, req v1.CatalogItemsReques
 			Ref: refFrom(m), Title: m.Name, Year: parseYear(m.ReleaseInfo), Poster: m.Poster,
 		})
 	}
-	return v1.CatalogItemsResponse{Items: items}, nil
+	return v1.CatalogItemsResponse{Items: items, HasMore: hasMore}, nil
+}
+
+// filterGenre is the addon-protocol extra this module offers as a filter. The
+// name is the protocol's own, so a selection goes straight back into a catalog
+// path with no translation — `CatalogFilter.Name` is source-native and opaque to
+// the Platform by design.
+const filterGenre = "genre"
+
+// filtersFor renders a catalog's declaration from the options its manifest
+// declares, dropping an extra that declares none: a filter with no options is a
+// control a consumer would draw empty and nobody could use.
+func filtersFor(d CatalogDecl) []v1.CatalogFilter {
+	values := d.GenreOptions()
+	if len(values) == 0 {
+		return nil
+	}
+	options := make([]v1.CatalogFilterOption, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			continue
+		}
+		// Value and label are the same string: the protocol addresses a genre by
+		// its own words. That is not true of every source — TMDB uses numeric ids
+		// — which is why the SDK carries both rather than one.
+		options = append(options, v1.CatalogFilterOption{Value: v, Label: v})
+	}
+	if len(options) == 0 {
+		return nil
+	}
+	return []v1.CatalogFilter{{Name: filterGenre, Label: "Genre", Options: options}}
+}
+
+// narrowingFor validates the caller's selection against the catalog's own
+// declaration and returns the genre to ask for, empty when none was selected.
+func narrowingFor(ctx context.Context, client *Client, req v1.CatalogItemsRequest) (string, error) {
+	if len(req.Filters) == 0 {
+		return "", nil
+	}
+	decl, ok := client.catalogDeclFor(ctx, req.NativeType, req.CatalogID)
+	if !ok {
+		return "", fmt.Errorf("no configured addon declares catalog %q for type %q", req.CatalogID, req.NativeType)
+	}
+	declared := filtersFor(decl)
+	genre := ""
+	for name, value := range req.Filters {
+		if name != filterGenre || len(declared) == 0 {
+			return "", fmt.Errorf("catalog %q has no filter named %q", req.CatalogID, name)
+		}
+		if !hasOption(declared[0].Options, value) {
+			return "", fmt.Errorf("catalog %q offers no genre %q", req.CatalogID, value)
+		}
+		genre = value
+	}
+	return genre, nil
+}
+
+func hasOption(options []v1.CatalogFilterOption, value string) bool {
+	for _, o := range options {
+		if o.Value == value {
+			return true
+		}
+	}
+	return false
 }
 
 // Streams resolves playable locations for a materialised item's ref (RoleStream

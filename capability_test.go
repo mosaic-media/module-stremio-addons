@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	stremio "github.com/mosaic-media/module-stremio-addons"
@@ -216,8 +217,23 @@ func fakeAddon(mode addonMode) *httptest.Server {
 		// Two catalogs, both search-capable, so search and browse have something
 		// to hit. A search-capable catalog declares "search" in its extra.
 		"catalogs": []map[string]interface{}{
-			{"type": "movie", "id": "top", "name": "Popular Movies", "extra": []map[string]interface{}{{"name": "search"}}},
+			{"type": "movie", "id": "top", "name": "Popular Movies", "extra": []map[string]interface{}{
+				{"name": "search"},
+				// A declared option list, which is what a filter can be built
+				// from — and an empty entry, which must be dropped rather than
+				// offered as a chip nothing can serve.
+				{"name": "genre", "options": []string{"Action", "Sci-Fi & Fantasy", ""}},
+			}},
 			{"type": "series", "id": "top", "name": "Popular Series", "extra": []map[string]interface{}{{"name": "search"}}},
+			// An extra with no options: free text, so no control can be built
+			// from it and the catalog declares no filter.
+			{"type": "movie", "id": "byname", "name": "By Name", "extra": []map[string]interface{}{{"name": "genre"}}},
+			// A catalog that cannot be listed without an argument a browse
+			// surface has no way to supply. It is dropped from the catalog list
+			// entirely rather than offered as a row that answers nothing.
+			{"type": "series", "id": "calendar", "name": "Calendar", "extra": []map[string]interface{}{
+				{"name": "calendarVideosIds", "isRequired": true},
+			}},
 		},
 		// A directory of installable addons, which is what the settings screen's
 		// browse grid reads (ADR 0038). It is declared here so that surface can be
@@ -238,6 +254,11 @@ func fakeAddon(mode addonMode) *httptest.Server {
 		// Catalog listing and search share a prefix; both return meta previews
 		// of the type in the path, so browse and search exercise both types.
 		case strings.HasPrefix(path, "/catalog/movie/"):
+			// The *escaped* path, which is the wire form. r.URL.Path is already
+			// decoded, and asserting on that would pass whether or not the value
+			// was escaped — which is the whole thing worth checking for a genre
+			// containing an ampersand.
+			catalogPaths.Store(r.URL.EscapedPath(), true)
 			writeJSON(w, map[string]interface{}{"metas": []map[string]interface{}{movieMeta}})
 		case strings.HasPrefix(path, "/catalog/series/"):
 			writeJSON(w, map[string]interface{}{"metas": []map[string]interface{}{seriesMeta}})
@@ -285,6 +306,16 @@ func fakeAddon(mode addonMode) *httptest.Server {
 		}
 	}
 	return httptest.NewServer(http.HandlerFunc(handler))
+}
+
+// catalogPaths records the catalog listings the fake was asked for, so a test
+// can assert the extra actually reached the wire rather than only that no error
+// came back.
+var catalogPaths sync.Map
+
+func askedForCatalog(path string) bool {
+	_, ok := catalogPaths.Load(path)
+	return ok
 }
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
@@ -542,5 +573,105 @@ func TestStreamsStillHonourThisModulesOwnRefs(t *testing.T) {
 	}
 	if len(resp.Streams) == 0 {
 		t.Fatal("a native ref stopped resolving")
+	}
+}
+
+// Faceting: an addon declares which of its catalogs can be narrowed and by what,
+// and a narrowing it never declared is refused.
+
+func TestCatalogsDeclareTheirDeclaredGenres(t *testing.T) {
+	addon := fakeAddon(withStreams)
+	defer addon.Close()
+	capability := stremio.New(nil)
+
+	resp, err := capability.Catalogs(context.Background(), v1.CatalogsRequest{
+		Caller: v1.CallerFromSession("s-1"), Settings: addonSettings(addon.URL),
+	})
+	if err != nil {
+		t.Fatalf("Catalogs: %v", err)
+	}
+
+	byKey := map[string]v1.Catalog{}
+	for _, c := range resp.Catalogs {
+		byKey[c.NativeType+"/"+c.ID] = c
+	}
+
+	// A catalog that cannot be listed without an argument is not offered at all.
+	// The surface addresses a catalog by id and has nothing to supply, so the
+	// row would answer nothing every time it was pressed.
+	if _, ok := byKey["series/calendar"]; ok {
+		t.Error("a catalog with a required extra was offered; it cannot be listed by id alone")
+	}
+
+	film := byKey["movie/top"]
+	if len(film.Filters) != 1 || film.Filters[0].Name != "genre" || film.Filters[0].Label != "Genre" {
+		t.Fatalf("popular movies filters = %+v, want one genre filter", film.Filters)
+	}
+	options := film.Filters[0].Options
+	if len(options) != 2 {
+		t.Fatalf("options = %+v, want two (the empty one dropped)", options)
+	}
+	if options[0].Value != "Action" || options[0].Label != "Action" {
+		t.Errorf("first option = %+v; the protocol addresses a genre by its own words", options[0])
+	}
+
+	// An extra with no declared options is free text. No control can be built
+	// from it, so no filter is declared rather than an empty one offered.
+	if got := byKey["movie/byname"].Filters; len(got) != 0 {
+		t.Errorf("a genre extra with no options declared %+v; it cannot back a control", got)
+	}
+	// And a catalog with no genre extra at all.
+	if got := byKey["series/top"].Filters; len(got) != 0 {
+		t.Errorf("popular series declared %+v with no genre extra", got)
+	}
+}
+
+func TestANarrowedCatalogPutsTheGenreOnTheWire(t *testing.T) {
+	addon := fakeAddon(withStreams)
+	defer addon.Close()
+	capability := stremio.New(nil)
+
+	if _, err := capability.CatalogItems(context.Background(), v1.CatalogItemsRequest{
+		Caller: v1.CallerFromSession("s-1"), Settings: addonSettings(addon.URL),
+		CatalogID: "top", NativeType: "movie",
+		// The ampersand is the point: "Sci-Fi & Fantasy" is a real genre, and
+		// unescaped it would read as a second extra rather than as one value.
+		Filters: map[string]string{"genre": "Sci-Fi & Fantasy"},
+	}); err != nil {
+		t.Fatalf("CatalogItems: %v", err)
+	}
+
+	want := "/catalog/movie/top/genre=Sci-Fi%20&%20Fantasy.json"
+	if !askedForCatalog(want) {
+		t.Fatalf("no request to %q", want)
+	}
+}
+
+// An addon answers an unknown genre with the *unfiltered* listing, so passing a
+// value through unchecked returns a plausible page for a question nobody asked.
+func TestAnUndeclaredNarrowingIsRefused(t *testing.T) {
+	addon := fakeAddon(withStreams)
+	defer addon.Close()
+	capability := stremio.New(nil)
+	ctx := context.Background()
+
+	cases := []struct {
+		name    string
+		catalog string
+		filters map[string]string
+	}{
+		{"a value the catalog does not offer", "top", map[string]string{"genre": "Nonesuch"}},
+		{"a filter name it does not have", "top", map[string]string{"year": "2025"}},
+		{"a catalog whose extra declares no options", "byname", map[string]string{"genre": "Action"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := capability.CatalogItems(ctx, v1.CatalogItemsRequest{
+				Caller: v1.CallerFromSession("s-1"), Settings: addonSettings(addon.URL),
+				CatalogID: tc.catalog, NativeType: "movie", Filters: tc.filters,
+			}); err == nil {
+				t.Fatal("accepted; a narrowing this module cannot honour must be declined rather than ignored")
+			}
+		})
 	}
 }

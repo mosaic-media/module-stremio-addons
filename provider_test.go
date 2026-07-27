@@ -72,8 +72,11 @@ func TestCatalogsAndItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Catalogs: %v", err)
 	}
-	if len(cats.Catalogs) != 2 {
-		t.Fatalf("catalogs = %d, want 2", len(cats.Catalogs))
+	// Three of the fake's four: the one declaring a required extra is dropped,
+	// because a browse surface addressing a catalog by id has nothing to supply
+	// for it.
+	if len(cats.Catalogs) != 3 {
+		t.Fatalf("catalogs = %d, want 3", len(cats.Catalogs))
 	}
 	if cats.Catalogs[0].Name != "Popular Movies" || cats.Catalogs[0].ID != "top" {
 		t.Fatalf("first catalog = %+v, want Popular Movies/top", cats.Catalogs[0])
