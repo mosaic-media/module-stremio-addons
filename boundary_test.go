@@ -16,7 +16,7 @@ import (
 // module contributes settings UI with, ADR 0038) — and the standard library. It
 // is a separate Go module, so Go itself already rejects a Platform-internal
 // import; this parse keeps the intent explicit and catches a third-party
-// dependency creeping in too (ADR 0008, ADR 0016, ADR 0025).
+// dependency creeping in too (ADR 0008, ADR 0016, contracts#3).
 func TestModuleImportsOnlyPublishedContracts(t *testing.T) {
 	const (
 		sdkPrefix      = "github.com/mosaic-media/sdk/"
@@ -77,7 +77,7 @@ func TestModuleImportsOnlyPublishedContracts(t *testing.T) {
 				// (ADR 0064).
 			case strings.HasPrefix(path, sduiPrefix):
 				// The shared SDUI contract — a module builds its own settings UI
-				// with the producer binding (ADR 0038, ADR 0025).
+				// with the producer binding (ADR 0038, contracts#3).
 			case strings.HasPrefix(path, platformPrefix):
 				t.Errorf("%s imports private Platform package %q; a module may import only the SDK", name, path)
 			default:
