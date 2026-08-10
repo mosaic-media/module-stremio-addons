@@ -40,6 +40,14 @@ point.
 
 ## Modules are the forcing function for the SDK
 
+**The SDK says how a module interacts with the Platform; the Platform holds the
+implementations**
+([ADR 0135](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0135-the-sdk-carries-no-implementation.md)).
+Its surface may be wide — a module nobody has imagined must be expressible — but
+never deep, and it depends on nothing. So a finding takes the form of a type or a
+verb that names no library; one that can only be closed by naming one is a
+Platform change reached through a declarative surface, not an SDK bump.
+
 This module exists to find the SDK's gaps by using it. When something cannot be
 expressed, that is a finding, not an obstacle to work around — user-managed
 settings (ADR 0021) and module-declared cron/jobs were both found this way. Take
