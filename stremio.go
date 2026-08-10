@@ -97,13 +97,13 @@ type Manifest struct {
 	Catalogs    []CatalogDecl  `json:"catalogs"`
 	// AddonCatalogs are catalogs of *other addons* this addon exposes (the
 	// `addon_catalog` resource) — how a user discovers installable addons without
-	// a manifest URL (ADR 0038).
+	// a manifest URL (sdk#4).
 	AddonCatalogs []CatalogDecl      `json:"addonCatalogs"`
 	BehaviorHints addonBehaviorHints `json:"behaviorHints"`
 }
 
 // addonBehaviorHints is the subset of a manifest's behaviorHints the settings UI
-// reads: whether the addon exposes its own configuration page (ADR 0038).
+// reads: whether the addon exposes its own configuration page (sdk#4).
 type addonBehaviorHints struct {
 	Configurable          bool `json:"configurable"`
 	ConfigurationRequired bool `json:"configurationRequired"`
@@ -226,7 +226,7 @@ func (r *ResourceDecl) UnmarshalJSON(b []byte) error {
 
 // Meta is the subset of a meta response this client reads. For a series,
 // Videos lists the episodes, each carrying its season and episode number.
-// Logo/ImdbRating/Runtime/Cast/Links back the rich detail surface (ADR 0034);
+// Logo/ImdbRating/Runtime/Cast/Links back the rich detail surface (sdk#3);
 // Cinemeta provides them all — the module simply decoded none of them before.
 type Meta struct {
 	ID         string `json:"id"`
@@ -239,7 +239,7 @@ type Meta struct {
 	// returns beside the portrait poster. It is not part of the base Stremio meta
 	// shape — Cinemeta has no such field — so it is empty for sources that do not
 	// carry it, and translated here rather than left for the Platform to learn
-	// (ADR 0051).
+	// (module-stremio-addons#2).
 	LandscapePoster string   `json:"landscapePoster"`
 	Description     string   `json:"description"`
 	ReleaseInfo     string   `json:"releaseInfo"`
@@ -285,7 +285,7 @@ type Link struct {
 }
 
 // Video is one episode of a series' meta. Overview/Thumbnail/Released back the
-// episode preview (ADR 0034); Cinemeta provides them on each video entry.
+// episode preview (sdk#3); Cinemeta provides them on each video entry.
 type Video struct {
 	ID       string `json:"id"`
 	Title    string `json:"title"`
@@ -314,7 +314,7 @@ func (v Video) EpisodeTitle() string {
 // Stream is the subset of a stream object this client reads. A stream is
 // either a direct URL or a torrent identified by InfoHash. Description/
 // BehaviorHints carry the release detail (quality, size) addons pack into the
-// title, which parseStreamMeta teases back out (ADR 0037).
+// title, which parseStreamMeta teases back out (module-stremio-addons#1).
 type Stream struct {
 	Name          string        `json:"name"`
 	Title         string        `json:"title"`
@@ -366,7 +366,7 @@ func (c *Client) Meta(ctx context.Context, typ, id string) (Meta, bool, error) {
 		if err := c.ensureManifest(ctx, a); err != nil {
 			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
 			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (ADR 0038).
+			// does not blank search, browse, or metadata (sdk#4).
 			continue
 		}
 		if !supports(a.manifest, "meta", typ, id) {
@@ -392,7 +392,7 @@ func (c *Client) Meta(ctx context.Context, typ, id string) (Meta, bool, error) {
 // configured addon serves a stream — the metadata-only case.
 // Streams fetches every stream a configured addon offers for a content id.
 //
-// Import stores all of them (ADR 0049): a candidate never expires, so keeping
+// Import stores all of them (platform#28): a candidate never expires, so keeping
 // the set costs nothing to keep correct, and it is what lets a consumer choose a
 // release the calling client can actually play instead of being handed whatever
 // happened to be first. Only the resolved URL is perishable, and that is cached
@@ -441,7 +441,7 @@ func (c *Client) Stream(ctx context.Context, typ, id string) (Stream, bool, erro
 		if err := c.ensureManifest(ctx, a); err != nil {
 			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
 			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (ADR 0038).
+			// does not blank search, browse, or metadata (sdk#4).
 			continue
 		}
 		if !supports(a.manifest, "stream", typ, id) {
@@ -465,7 +465,7 @@ func (c *Client) Stream(ctx context.Context, typ, id string) (Stream, bool, erro
 // Subtitles fetches subtitle tracks for a content id (a movie id or an episode
 // id of the form tt...:season:episode) from the first addon whose manifest
 // serves the subtitles resource for the type. It returns ok=false, no error,
-// when no configured addon serves subtitles (ADR 0037).
+// when no configured addon serves subtitles (module-stremio-addons#1).
 func (c *Client) Subtitles(ctx context.Context, typ, id string) ([]Subtitle, bool, error) {
 	var (
 		mu  sync.Mutex
@@ -521,7 +521,7 @@ func (c *Client) Catalogs(ctx context.Context) ([]CatalogDecl, error) {
 		if err := c.ensureManifest(ctx, a); err != nil {
 			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
 			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (ADR 0038).
+			// does not blank search, browse, or metadata (sdk#4).
 			continue
 		}
 		out = append(out, a.manifest.Catalogs...)
@@ -553,7 +553,7 @@ func (c *Client) CatalogItems(ctx context.Context, typ, id, genre string, skip i
 		if err := c.ensureManifest(ctx, a); err != nil {
 			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
 			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (ADR 0038).
+			// does not blank search, browse, or metadata (sdk#4).
 			continue
 		}
 		if !hasCatalog(a.manifest, typ, id) {
@@ -614,7 +614,7 @@ func (c *Client) Search(ctx context.Context, query string) ([]MetaPreview, error
 		if err := c.ensureManifest(ctx, a); err != nil {
 			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
 			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (ADR 0038).
+			// does not blank search, browse, or metadata (sdk#4).
 			continue
 		}
 		for _, cat := range a.manifest.Catalogs {
@@ -648,7 +648,7 @@ type AddonCatalogEntry struct {
 	Manifest     Manifest `json:"manifest"`
 }
 
-// AddonInfo is the display detail for one configured addon (ADR 0038): the name,
+// AddonInfo is the display detail for one configured addon (sdk#4): the name,
 // logo and description from its manifest, whether it is configurable, and the
 // normalised base URL that identifies it. An addon whose manifest cannot be
 // fetched still yields an entry (named by its URL) so a user can remove it.
@@ -692,7 +692,7 @@ func (c *Client) AddonCatalog(ctx context.Context) ([]AddonCatalogEntry, error) 
 		if err := c.ensureManifest(ctx, a); err != nil {
 			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
 			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (ADR 0038).
+			// does not blank search, browse, or metadata (sdk#4).
 			continue
 		}
 		for _, cat := range a.manifest.AddonCatalogs {
@@ -780,22 +780,22 @@ func hasAnyPrefix(s string, prefixes []string) bool {
 }
 
 // streamMeta is the release detail parsed out of a stream's descriptive text and
-// behaviorHints (ADR 0037): quality, size and swarm health. All fields are
+// behaviorHints (module-stremio-addons#1): quality, size and swarm health. All fields are
 // best-effort — addons pack this into free text, so a miss leaves a field zero.
 type streamMeta struct {
 	quality   string
 	sizeBytes int64
 	seeders   int
 	// container, videoCodec and audioCodec are what a consumer needs to know
-	// whether a client can play this at all (ADR 0048). They are parsed here, at
+	// whether a client can play this at all (platform#27). They are parsed here, at
 	// the boundary, rather than left for something downstream to infer from a
-	// URL — which is exactly the leak ADR 0051 names: the container hint has
+	// URL — which is exactly the leak module-stremio-addons#2 names: the container hint has
 	// already been found hiding in a query parameter, where no consumer should
 	// have been looking for it.
 	//
 	// Best-effort like the rest: this makes a candidate list *rankable*. What a
 	// release actually contains is settled by probing the bytes before it plays
-	// (ADR 0050), because release text lies and this cannot see inside a file.
+	// (platform#29), because release text lies and this cannot see inside a file.
 	container  string
 	videoCodec string
 	audioCodec string

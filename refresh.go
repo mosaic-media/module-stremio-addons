@@ -107,7 +107,7 @@ func (c *Capability) refreshItem(ctx context.Context, client *Client, svc v1.Con
 // every fetch, so keying on it would find nothing already stored and re-attach
 // the entire listing each time. The release *identity* is what persists: the
 // filename or release name, and failing that a magnet's info hash. That is the
-// same durable-versus-perishable split the resolution cache draws (ADR 0049),
+// same durable-versus-perishable split the resolution cache draws (platform#28),
 // one level down — the file is the durable thing, the way to fetch it is not.
 func candidateKey(label, ref string) string {
 	if l := strings.ToLower(strings.TrimSpace(label)); l != "" {

@@ -14,13 +14,13 @@ import (
 )
 
 // TestSettingsUIRendersSections proves the module contributes a settings screen
-// (ADR 0038): a Screen carrying the add-by-URL form (a Form whose named field
+// (sdk#4): a Screen carrying the add-by-URL form (a Form whose named field
 // writes addAddon and whose submit carries configureModule), the installed addon
 // with a Remove control, and a browse grid of installable addons.
 //
 // The browse section also consults Stremio's official addon directory, which the
 // module names by URL — the one thing that survived the bundled default's
-// removal, because it is a directory rather than a content source (ADR 0072).
+// removal, because it is a directory rather than a content source (module-cinemeta#1).
 // The rewriting transport is what keeps that hermetic: every outbound request
 // lands on the fake whatever host it names, so the directory is exercised
 // without reaching the real one.
@@ -48,7 +48,7 @@ func TestSettingsUIRendersSections(t *testing.T) {
 	s := string(resp.UI)
 	// The add form, the installed addon rendered as a card (its manifest name and
 	// logo, a Configure control since it declares configurable, and Remove), and
-	// a Grid layout (ADR 0038 improvements).
+	// a Grid layout (sdk#4 improvements).
 	for _, want := range []string{
 		"Form", "TextInput", "addAddon", "submit", "configureModule", "Add an addon", "Installed addons",
 		"Fake Addon", "http://fake/logo.png", "Configure", "Remove", "Grid", "Browse addons",

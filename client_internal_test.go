@@ -37,9 +37,9 @@ func TestNormaliseAddonURL(t *testing.T) {
 // TestAddonsAreOnlyWhatTheUserConfigured pins that this module bundles no addon
 // of its own.
 //
-// It used to bundle Cinemeta so a fresh install had metadata (ADR 0035). That
+// It used to bundle Cinemeta so a fresh install had metadata (platform#23). That
 // guarantee moved to `module-cinemeta`, a core module that cannot be switched
-// off (ADR 0072), and leaving a second Cinemeta here would have shown every
+// off (module-cinemeta#1), and leaving a second Cinemeta here would have shown every
 // title twice in search — the Platform unions search providers without
 // cross-provider dedup.
 func TestAddonsAreOnlyWhatTheUserConfigured(t *testing.T) {
@@ -93,7 +93,7 @@ func TestAddonsAreOnlyWhatTheUserConfigured(t *testing.T) {
 	}
 }
 
-// TestUsefulToMosaic pins the browse compatibility filter (ADR 0038): an addon
+// TestUsefulToMosaic pins the browse compatibility filter (sdk#4): an addon
 // is offered only if it fills a role the Platform sources.
 func TestUsefulToMosaic(t *testing.T) {
 	useful := func(names ...string) Manifest {

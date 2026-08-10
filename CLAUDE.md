@@ -4,8 +4,8 @@ This repository is the **first optional Mosaic module**: a Go client of the
 Stremio addon protocol, built exactly as a third party's module would be — its
 own Go module importing only the published contracts, compiled into a Platform
 binary and invoked through the capability registry
-([ADR 0019](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0019-module-capability-and-invocation.md),
-[ADR 0020](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0020-optional-module-composition.md)).
+([platform#15](https://github.com/mosaic-media/platform/blob/main/docs/adr/0015-module-capability-and-invocation.md),
+[platform#16](https://github.com/mosaic-media/platform/blob/main/docs/adr/0016-optional-module-composition.md)).
 "Official" describes only its authorship, not its shape; the discipline is the
 point.
 
@@ -15,11 +15,11 @@ point.
   [`contracts`](https://github.com/mosaic-media/contracts) and the standard library.**
   `boundary_test.go` parses every import and fails on anything else. `sdui` is
   allowed because this module authors its own settings screen
-  ([ADR 0038](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0038-module-contributed-settings-ui.md))
-  — it declares a *form*, not a screen, which is what keeps ADR 0008's "modules
+  ([sdk#4](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0004-module-contributed-settings-ui.md))
+  — it declares a *form*, not a screen, which is what keeps [sdk#1](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0001-sdk-as-public-contract-language.md)'s "modules
   contribute data, not screens" intact.
 - **This module is an anti-corruption layer, and that is its job**
-  ([ADR 0051](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0051-modules-as-anti-corruption-layers.md)).
+  ([module-stremio-addons#2](docs/adr/0002-modules-as-anti-corruption-layers.md)).
   Upstream dialects are translated *here*, at the boundary, into the SDK's typed
   fields — a dialect table keyed on addon manifest id, an explicit list of
   sources actually tested, and a generic fallback for the rest. The Platform must
@@ -33,16 +33,16 @@ point.
   each configured addon declares. A meta-only addon must yield metadata with no
   Parts, so a user can enrich local media without adopting remote streaming.
 - **Settings are user-managed opaque JSON** handed in by the Platform
-  ([ADR 0021](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0021-module-settings.md)),
+  ([platform#17](https://github.com/mosaic-media/platform/blob/main/docs/adr/0017-module-settings.md)),
   not env vars and not Platform config. The module owns their meaning.
 - **MIT-licensed**, the author's choice, unlike the Platform's AGPL
-  ([ADR 0022](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0022-licensing.md)).
+  ([platform#1](https://github.com/mosaic-media/platform/blob/main/docs/adr/0001-transactional-store-extensibility.md)).
 
 ## Modules are the forcing function for the SDK
 
 **The SDK says how a module interacts with the Platform; the Platform holds the
 implementations**
-([ADR 0135](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0135-the-sdk-carries-no-implementation.md)).
+([sdk#10](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0010-the-sdk-carries-no-implementation.md)).
 Its surface may be wide — a module nobody has imagined must be expressible — but
 never deep, and it depends on nothing. So a finding takes the form of a type or a
 verb that names no library; one that can only be closed by naming one is a
@@ -50,7 +50,7 @@ Platform change reached through a declarative surface, not an SDK bump.
 
 This module exists to find the SDK's gaps by using it. When something cannot be
 expressed, that is a finding, not an obstacle to work around — user-managed
-settings (ADR 0021) and module-declared cron/jobs were both found this way. Take
+settings ([platform#17](https://github.com/mosaic-media/platform/blob/main/docs/adr/0017-module-settings.md)) and module-declared cron/jobs were both found this way. Take
 it to the SDK as an additive `v0.x` bump, or record it in the roadmap as an open
 gap. **Do not simulate the missing surface locally.**
 
@@ -99,7 +99,7 @@ Two things it protects, and the second is particular to this module:
 - **Commit author identity** must be `AdamNi-7080 <anicholls41@gmail.com>`.
 - The test container green before pushing.
 - Observability goes through the SDK's ambient `v1.Telemetry`
-  ([ADR 0059](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0059-modules-observe-through-the-sdk.md)),
+  ([sdk#5](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0005-modules-observe-through-the-sdk.md)),
   reached as `TelemetryFrom(ctx)`. Do not print, and do not configure an
   exporter, a sink or retention — the Platform owns the observability plane.
 - Real addons are the test fixture that matters. Two blocking bugs here —

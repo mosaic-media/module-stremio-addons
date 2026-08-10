@@ -3,7 +3,7 @@
 // own Go module (github.com/mosaic-media/module-stremio-addons) importing only
 // the published SDK (contracts/platform/v1) and the standard library, and it
 // is compiled into the Platform binary and invoked through the capability
-// registry (ADR 0007, ADR 0008).
+// registry (platform#4, sdk#1).
 //
 // It consumes the Stremio addon protocol as a client: it points at one or more
 // addon HTTP endpoints and, guided by each addon's manifest, uses whatever
@@ -14,8 +14,8 @@
 // media through Stremio addons without adopting remote streaming. Streams are
 // opt-in by which addons are configured, not by the module.
 //
-// It owns no schema (ADR 0012): everything it does to the graph goes through
-// ContentService, acting as the Caller the Platform hands it (ADR 0017). Stream
+// It owns no schema (platform#8): everything it does to the graph goes through
+// ContentService, acting as the Caller the Platform hands it (platform#13). Stream
 // locations are snapshotted at import; resolving or transcoding them at play
 // time is a separate, future concern (the Remote Media module), deliberately
 // not here.

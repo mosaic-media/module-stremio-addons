@@ -160,7 +160,7 @@ func TestImportRejectsEmptyRef(t *testing.T) {
 
 func TestImportRejectsWhenNoAddonConfigured(t *testing.T) {
 	cap := stremio.New(nil)
-	// This module bundles no addon of its own (ADR 0072), so "nothing
+	// This module bundles no addon of its own (module-cinemeta#1), so "nothing
 	// configured" is the state a fresh install is in and an import in it must be
 	// refused rather than quietly doing nothing. It is also what keeps this test
 	// hermetic: there is no default to reach for over the network.
@@ -236,7 +236,7 @@ func fakeAddon(mode addonMode) *httptest.Server {
 			}},
 		},
 		// A directory of installable addons, which is what the settings screen's
-		// browse grid reads (ADR 0038). It is declared here so that surface can be
+		// browse grid reads (sdk#4). It is declared here so that surface can be
 		// exercised without reaching Stremio's real directory.
 		"addonCatalogs": []map[string]interface{}{
 			{"type": "all", "id": "official", "name": "Official"},
@@ -277,7 +277,7 @@ func fakeAddon(mode addonMode) *httptest.Server {
 			}})
 		case strings.HasPrefix(path, "/stream/"):
 			// One direct-play stream for whatever id was asked, with the release
-			// detail packed into the title the way real addons do (ADR 0037).
+			// detail packed into the title the way real addons do (module-stremio-addons#1).
 			writeJSON(w, map[string]interface{}{"streams": []map[string]interface{}{
 				{
 					"name":  "Fake",
@@ -380,7 +380,7 @@ func (f *fakeContent) AddContentChild(_ context.Context, cmd v1.AddContentChildC
 // The technical fields are carried across rather than dropped. They were
 // dropped, and that made the fake unable to observe the thing this module is
 // most responsible for: it fills Container, VideoCodec and AudioCodec at the
-// boundary (ADR 0051) precisely because an empty one is not neutral downstream,
+// boundary (module-stremio-addons#2) precisely because an empty one is not neutral downstream,
 // and a fake that discarded them meant no test here could tell a filled field
 // from an empty one.
 func (f *fakeContent) AttachContentPart(_ context.Context, cmd v1.AttachContentPartCommand) (v1.AttachContentPartResult, error) {
@@ -395,7 +395,7 @@ func (f *fakeContent) AttachContentPart(_ context.Context, cmd v1.AttachContentP
 	return v1.AttachContentPartResult{Part: p}, nil
 }
 
-// SetContentArtwork arrived with SDK v0.21.0 (ADR 0074's candidate set). This
+// SetContentArtwork arrived with SDK v0.21.0 (platform#47's candidate set). This
 // module writes no artwork of its own — a Stremio addon supplies whatever
 // poster it happens to carry through the metadata path — so the fake satisfies
 // the interface and records nothing.
@@ -477,7 +477,7 @@ func (f *fakeContent) ListInProgress(context.Context, v1.ListInProgressQuery) (v
 
 var _ v1.ContentService = (*fakeContent)(nil)
 
-// Being asked about content this module did not source (ADR 0073). The Platform
+// Being asked about content this module did not source (platform#46). The Platform
 // runs a stream-enrichment pass after any import, so these refs come from TMDB
 // and Cinemeta rather than from a Stremio search.
 

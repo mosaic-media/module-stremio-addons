@@ -9,7 +9,7 @@ import (
 )
 
 // SettingsUI renders the module's own settings screen as SDUI (RoleSettingsUI,
-// ADR 0038): add an addon by manifest URL, view the installed addons as cards
+// sdk#4): add an addon by manifest URL, view the installed addons as cards
 // (name, logo, description) with a way to configure or remove them, and browse a
 // grid of installable addons (the addon_catalog resource) to add without a URL.
 // Every mutating control is an Invoke of the Platform's configureModule command
@@ -132,7 +132,7 @@ func browseSection(ctx context.Context, client *Client, userAddons []string) *ui
 		// Only offer addons Mosaic can actually use — those that fill one of the
 		// provider roles it sources (metadata, catalog/search, stream, subtitles).
 		// This hides addon-catalog-only, UI-overlay and behaviour-only addons that
-		// would install but contribute nothing (ADR 0038).
+		// would install but contribute nothing (sdk#4).
 		if !usefulToMosaic(e.Manifest) {
 			continue
 		}
@@ -189,7 +189,7 @@ func addonCard(name, logo, description string, controls ...ui.El) *ui.Element {
 // sources — mid-credits/jump-scare/clock overlays, debrid/VPN status panels,
 // watch-party, rich-presence and companion addons. They inject non-content
 // through the stream/meta/subtitles resources, so they are indistinguishable
-// from real sources by resource type (ADR 0038) and must be named to hide. It is
+// from real sources by resource type (sdk#4) and must be named to hide. It is
 // deliberately non-exhaustive — the browse disclaimer covers what it misses.
 var deniedAddonIDs = map[string]bool{
 	"com.almosteffective.aftercredits": true, // AfterCredits
@@ -212,10 +212,10 @@ var deniedAddonIDs = map[string]bool{
 
 // usefulToMosaic reports whether an addon is worth offering in browse: it fills a
 // provider role the Platform sources (metadata, catalog/search, stream,
-// subtitles — ADR 0027/0037) and is not on the curated deny-list of non-content
+// subtitles — sdk#2/0037) and is not on the curated deny-list of non-content
 // overlays/status addons. Compatibility is best-effort: Stremio has no field
 // separating a content source from an enhancement addon, so this is a heuristic
-// plus a named deny-list, with a disclaimer covering the rest (ADR 0038).
+// plus a named deny-list, with a disclaimer covering the rest (sdk#4).
 func usefulToMosaic(m Manifest) bool {
 	if deniedAddonIDs[m.ID] {
 		return false

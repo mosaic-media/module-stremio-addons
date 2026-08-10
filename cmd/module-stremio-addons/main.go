@@ -1,8 +1,8 @@
 // Command module-stremio-addons runs this module as its own process, for a
-// Platform that hosts it out of process (ADR 0064, ADR 0077).
+// Platform that hosts it out of process (platform#39, sdk#7).
 //
 // The whole of it is one line, and that is the point rather than a
-// simplification. ADR 0064 is arranged around the property that crossing the
+// simplification. platform#39 is arranged around the property that crossing the
 // process boundary must not change what a module author writes: the Capability
 // below is the same plain Go value the Platform used to link into its own
 // binary, its provider roles are the same methods, and its tests still run with
@@ -19,12 +19,12 @@
 //
 //   - **Nothing may be written to stdout.** go-plugin writes its handshake
 //     there, and anything else corrupts it. Use the Telemetry reached from the
-//     invocation's context (ADR 0059) — it goes to the Platform's observability
+//     invocation's context (sdk#5) — it goes to the Platform's observability
 //     plane rather than a stream nobody reads.
 //   - **The Caller is a handle, not a session.** It is minted per invocation and
 //     stops resolving when that invocation returns, so it cannot usefully be
 //     stored. Module code never has to know: it forwards what it was given,
-//     exactly as ADR 0017 already required.
+//     exactly as platform#13 already required.
 package main
 
 import (
@@ -36,10 +36,10 @@ import (
 func main() {
 	// nil takes the module's default HTTP client. In process the Platform hands
 	// one in so outbound calls route through its dial guard and carry trace
-	// context (ADR 0055, seam 9); out of process it cannot, because an
+	// context (platform#33, seam 9); out of process it cannot, because an
 	// *http.Client does not cross a process boundary.
 	//
-	// That is not a regression waiting to happen, it is the seam ADR 0064 moves:
+	// That is not a regression waiting to happen, it is the seam platform#39 moves:
 	// egress for an out-of-process module is contained by a forward proxy the
 	// Platform operates, which sees every host whether the module cooperates or
 	// not. **That proxy is not built yet**, so until it is, this process's

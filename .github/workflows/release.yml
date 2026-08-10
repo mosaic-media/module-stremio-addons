@@ -103,9 +103,9 @@ jobs:
           GOPROXY: https://proxy.golang.org,direct
           GOFLAGS: -mod=mod
 
-  # ADR 0081 took this module out of the Platform binary. Nothing requires it in
+  # platform#51 took this module out of the Platform binary. Nothing requires it in
   # platform's go.mod any more; a Platform gains it when a *user* installs it,
-  # from the signed index the official registry publishes (ADR 0065, ADR 0079).
+  # from the signed index the official registry publishes (platform#40, platform#49).
   # A release therefore reaches people through the **catalogue**, not through a
   # go.mod bump, and this dispatch is what tells the registry there is a newer
   # version to catalogue — the last hand-done step between a tag and an
@@ -154,8 +154,8 @@ jobs:
             --field "client_payload[version]=${GITHUB_REF_NAME}"
 
   # The out-of-process release: cross-compiled binaries and a manifest.json, the
-  # artefacts the registry catalogues (ADR 0065, ADR 0079). This is what marks
-  # this module as one that can run in its own process, and since ADR 0081 it is
+  # artefacts the registry catalogues (platform#40, platform#49). This is what marks
+  # this module as one that can run in its own process, and since platform#51 it is
   # how the module reaches a Platform at all: nothing requires the Go tag any
   # more, and the tag remains because it is what mints the version and carries
   # the release object these assets hang off.

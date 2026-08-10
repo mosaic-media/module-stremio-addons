@@ -13,10 +13,10 @@ import (
 // TestModuleImportsOnlyPublishedContracts is the module boundary made
 // executable: the Stremio module must use only the published *contract* modules
 // — the SDK (mosaic-sdk) and the shared SDUI contract (mosaic-sdui, which a
-// module contributes settings UI with, ADR 0038) — and the standard library. It
+// module contributes settings UI with, sdk#4) — and the standard library. It
 // is a separate Go module, so Go itself already rejects a Platform-internal
 // import; this parse keeps the intent explicit and catches a third-party
-// dependency creeping in too (ADR 0008, ADR 0016, contracts#3).
+// dependency creeping in too (sdk#1, platform#12, contracts#3).
 func TestModuleImportsOnlyPublishedContracts(t *testing.T) {
 	const (
 		sdkPrefix      = "github.com/mosaic-media/sdk/"
@@ -28,7 +28,7 @@ func TestModuleImportsOnlyPublishedContracts(t *testing.T) {
 	)
 
 	// Walked rather than a flat ReadDir of ".". The module gained a cmd/
-	// directory when it learned to run as its own process (ADR 0064), and a
+	// directory when it learned to run as its own process (platform#39), and a
 	// check that only looked at the root would have declared the boundary clean
 	// while never reading the one file that imports the harness.
 	var sources []string
@@ -74,10 +74,10 @@ func TestModuleImportsOnlyPublishedContracts(t *testing.T) {
 				// against. sdk/host sits under this prefix, which is correct:
 				// the harness is published beside the contract precisely so a
 				// module needs no dependency the SDK did not already sanction
-				// (ADR 0064).
+				// (platform#39).
 			case strings.HasPrefix(path, sduiPrefix):
 				// The shared SDUI contract — a module builds its own settings UI
-				// with the producer binding (ADR 0038, contracts#3).
+				// with the producer binding (sdk#4, contracts#3).
 			case strings.HasPrefix(path, platformPrefix):
 				t.Errorf("%s imports private Platform package %q; a module may import only the SDK", name, path)
 			default:

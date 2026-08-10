@@ -31,12 +31,12 @@ const (
 	// binding only records where the reference came from.
 	streamProvider = "stremio"
 	// addonCatalogSource is Stremio's official addon directory, used *only* to
-	// populate the browse grid (ADR 0038) — never as a content source.
+	// populate the browse grid (sdk#4) — never as a content source.
 	//
 	// Cinemeta used to be bundled here as a metadata default so that metadata and
-	// search worked with no configuration (ADR 0035). It is not any more:
+	// search worked with no configuration (platform#23). It is not any more:
 	// `module-cinemeta` is that guarantee now, as a core module that cannot be
-	// switched off or misconfigured (ADR 0072), and leaving a second Cinemeta in
+	// switched off or misconfigured (module-cinemeta#1), and leaving a second Cinemeta in
 	// this module's sourcing list would show every title twice in search.
 	//
 	// What the bundled default *also* quietly provided was the `addon_catalog`
@@ -55,7 +55,7 @@ var moduleVersion = v1.ModuleVersion(modulePath)
 
 // Capability satisfies the SDK's capability contract and every provider role it
 // declares in its Manifest. The assertions fail to compile if the module drifts
-// from what the Platform invokes or from a role it claims to fill (ADR 0027).
+// from what the Platform invokes or from a role it claims to fill (sdk#2).
 var (
 	_ v1.Capability         = (*Capability)(nil)
 	_ v1.MetadataProvider   = (*Capability)(nil)
@@ -66,15 +66,15 @@ var (
 	_ v1.SettingsUIProvider = (*Capability)(nil)
 )
 
-// Capability is the Stremio addon-source module (ADR 0008's capability
+// Capability is the Stremio addon-source module (sdk#1's capability
 // surface, first populated). It holds only an HTTP client; the addons it sources
 // from are whatever a user adds through its settings, handed in at invocation
-// time (ADR 0021), so one registered module serves whatever each user
+// time (platform#17), so one registered module serves whatever each user
 // configures. It owns no schema and imports no Platform internals.
 //
 // It bundles no addon of its own. It used to bundle Cinemeta so that a fresh
-// install had metadata (ADR 0035); that guarantee now belongs to
-// `module-cinemeta`, a core module that cannot be switched off (ADR 0072), and
+// install had metadata (platform#23); that guarantee now belongs to
+// `module-cinemeta`, a core module that cannot be switched off (module-cinemeta#1), and
 // this module is purely what a user chose.
 type Capability struct {
 	httpClient *http.Client
@@ -164,7 +164,7 @@ func (c *Capability) clientFrom(settings []byte) (*Client, error) {
 }
 
 // Manifest is the module's self-declaration, including the provider roles it
-// fills (ADR 0027). It sources metadata and searches and browses catalogs, and
+// fills (sdk#2). It sources metadata and searches and browses catalogs, and
 // resolves streams — the four Stremio addon resources.
 func (c *Capability) Manifest() v1.Manifest {
 	return v1.Manifest{
@@ -177,7 +177,7 @@ func (c *Capability) Manifest() v1.Manifest {
 }
 
 // Import materialises the virtual item named by req.Ref — a result a search or
-// catalog browse produced (ADR 0028) — from the configured addons into the
+// catalog browse produced (platform#18) — from the configured addons into the
 // Platform. It fetches metadata (required), searches to avoid duplicating,
 // creates the Work with an external-id binding, builds the tree, and attaches
 // a RemoteLocation Part wherever a stream addon serves one. Metadata alone is
@@ -229,7 +229,7 @@ func (c *Capability) Import(ctx context.Context, svc v1.ContentService, req v1.I
 		ExternalIDs: externalIDs(id),
 		// Store the art alongside the work so a list surface (the continue-
 		// watching rail) renders it without re-fetching metadata per card, and so
-		// it can later be user-overridden (ADR 0071). These are the same fields
+		// it can later be user-overridden (platform#45). These are the same fields
 		// the metadata read already decodes.
 		Artwork: v1.Artwork{
 			Poster: meta.Poster, Landscape: meta.LandscapePoster,
@@ -271,7 +271,7 @@ func (c *Capability) Import(ctx context.Context, svc v1.ContentService, req v1.I
 }
 
 // importMovie builds a film as Work -> feature item, attaching the stream to
-// the item (a Part attaches to an item, never a work — ADR 0013).
+// the item (a Part attaches to an item, never a work — platform#9).
 func (c *Capability) importMovie(ctx context.Context, client *Client, svc v1.ContentService, caller v1.Caller, workID v1.NodeID, id string, result *v1.ImportResult) error {
 	item, err := svc.AddContentChild(ctx, v1.AddContentChildCommand{
 		Caller: caller, ParentID: workID,
@@ -324,7 +324,7 @@ func (c *Capability) importSeries(ctx context.Context, client *Client, svc v1.Co
 // and attaches each as a RemoteLocation Part. No stream is not an error: a
 // meta-only import creates the tree without Parts.
 //
-// All of them, not the first (ADR 0049). A source returns dozens of releases for
+// All of them, not the first (platform#28). A source returns dozens of releases for
 // one film, differing in container, codec, language and size, and which one a
 // viewer can actually play depends on the client asking — a fact not available
 // at import time and different for two clients of the same install. Storing one
@@ -332,7 +332,7 @@ func (c *Capability) importSeries(ctx context.Context, client *Client, svc v1.Co
 // expire, so keeping the whole set costs nothing to keep correct; only the
 // resolved URL is perishable, and that is cached elsewhere.
 //
-// Each carries the release detail parsed at this boundary (ADR 0051), so a
+// Each carries the release detail parsed at this boundary (module-stremio-addons#2), so a
 // consumer ranks on typed fields rather than re-deriving them from a URL.
 func (c *Capability) attachStream(ctx context.Context, client *Client, svc v1.ContentService, caller v1.Caller, itemID v1.NodeID, typ, id string, result *v1.ImportResult) error {
 	streams, err := client.Streams(ctx, typ, id)
@@ -385,7 +385,7 @@ func (c *Capability) find(ctx context.Context, svc v1.ContentService, caller v1.
 // Metadata resolves descriptive detail for a ref (RoleMetadata — the addon
 // `meta` resource). It is the enrichment surface: the descriptive fields, not
 // the containment tree, which Import builds where the source's structure is
-// known (ADR 0027).
+// known (sdk#2).
 func (c *Capability) Metadata(ctx context.Context, req v1.MetadataRequest) (v1.ContentMetadata, error) {
 	client, err := c.clientFrom(req.Settings)
 	if err != nil {
@@ -434,7 +434,7 @@ func (c *Capability) Metadata(ctx context.Context, req v1.MetadataRequest) (v1.C
 // castOf reads the cast names from a meta, preferring the modern `links` array
 // (category "Cast") and falling back to the legacy top-level `cast` list. Names
 // are de-duplicated and capped, since a detail shows the *top* cast, not all of
-// it. Cinemeta gives names only, so Role is left empty (ADR 0034).
+// it. Cinemeta gives names only, so Role is left empty (sdk#3).
 func castOf(meta Meta) []v1.Person {
 	const maxCast = 18
 	seen := make(map[string]bool)
@@ -504,7 +504,7 @@ func parseRating(s string) float64 {
 
 // Search returns virtual candidates for free text (RoleSearch — the addon
 // `catalog/…/search` resource). No raw id: this is what makes user search in
-// Mosaic work over source content that is not in the library (ADR 0028).
+// Mosaic work over source content that is not in the library (platform#18).
 func (c *Capability) Search(ctx context.Context, req v1.SearchRequest) (v1.SearchResponse, error) {
 	client, err := c.clientFrom(req.Settings)
 	if err != nil {
@@ -553,7 +553,7 @@ func (c *Capability) Catalogs(ctx context.Context, req v1.CatalogsRequest) (v1.C
 }
 
 // CatalogItems lists one collection's entries as virtual candidates the admin
-// can select to publish (ADR 0028). It does not touch the object graph.
+// can select to publish (platform#18). It does not touch the object graph.
 func (c *Capability) CatalogItems(ctx context.Context, req v1.CatalogItemsRequest) (v1.CatalogItemsResponse, error) {
 	client, err := c.clientFrom(req.Settings)
 	if err != nil {
@@ -658,7 +658,7 @@ func (c *Capability) Streams(ctx context.Context, req v1.StreamRequest) (v1.Stre
 	typ, id, ok := addressOf(req.Ref, req.Season, req.Episode)
 	if !ok {
 		// Not a title this module can address. Normal rather than exceptional
-		// (ADR 0073): the Platform asks every stream provider about content some
+		// (platform#46): the Platform asks every stream provider about content some
 		// other module sourced, and erroring here would fail a user's import over
 		// a title that was never Stremio's to know.
 		return v1.StreamResponse{}, nil
@@ -674,7 +674,7 @@ func (c *Capability) Streams(ctx context.Context, req v1.StreamRequest) (v1.Stre
 }
 
 // streamLinkFrom maps a Stremio stream to the SDK StreamLink, carrying the
-// release detail parsed at this boundary (ADR 0037, ADR 0051) so a consumer
+// release detail parsed at this boundary (module-stremio-addons#1, module-stremio-addons#2) so a consumer
 // ranks on typed fields rather than re-deriving them from a URL.
 //
 // Every field parseStreamMeta works out now has somewhere to go except the
@@ -682,7 +682,7 @@ func (c *Capability) Streams(ctx context.Context, req v1.StreamRequest) (v1.Stre
 // the container and the two codecs had nowhere at all, so this narrowed the
 // parse to quality, size and seeders on the way out and the same walk over the
 // same text produced a richer answer for a Part than for a link — which is
-// exactly the leak ADR 0051 names, since the only place left to recover them
+// exactly the leak module-stremio-addons#2 names, since the only place left to recover them
 // was the URL.
 func streamLinkFrom(stream Stream) v1.StreamLink {
 	meta := parseStreamMeta(stream)
@@ -700,7 +700,7 @@ func streamLinkFrom(stream Stream) v1.StreamLink {
 }
 
 // Subtitles resolves subtitle tracks for a materialised item's ref (RoleSubtitles
-// — the addon `subtitles` resource, ADR 0037). Like Streams it is a source role;
+// — the addon `subtitles` resource, module-stremio-addons#1). Like Streams it is a source role;
 // the consumer is a player that does not exist yet, so this is built ahead of it.
 // It returns an empty response, no error, when no addon serves subtitles.
 func (c *Capability) Subtitles(ctx context.Context, req v1.SubtitlesRequest) (v1.SubtitlesResponse, error) {
@@ -734,7 +734,7 @@ func (c *Capability) Subtitles(ctx context.Context, req v1.SubtitlesRequest) (v1
 // addressOf works out how to ask an addon about the item a request names,
 // whether or not this module is the one that sourced it.
 //
-// **This is the anti-corruption layer doing its actual job** (ADR 0051, ADR
+// **This is the anti-corruption layer doing its actual job** (module-stremio-addons#2, ADR
 // 0073). Two shapes of request arrive here now:
 //
 //   - The module's own ref, from a Stremio search or import. NativeID and
@@ -779,7 +779,7 @@ func addressOf(ref v1.ContentRef, season, episode int) (typ, id string, ok bool)
 
 // refFrom builds a ContentRef from a catalog/search preview. Stremio content is
 // keyed by IMDB id, so the native id doubles as the external id the Platform
-// dedups and binds on (ADR 0028).
+// dedups and binds on (platform#18).
 func refFrom(m MetaPreview) v1.ContentRef {
 	return v1.ContentRef{
 		Provider: CapabilityID, NativeID: m.ID, NativeType: m.Type,
@@ -812,7 +812,7 @@ func catalogName(d CatalogDecl) string {
 
 // mediaTypeFor maps a Stremio content type to a Platform media type, using the
 // known constants for the two Stremio types and canonicalising anything else
-// as open text (ADR 0015).
+// as open text (platform#11).
 func mediaTypeFor(typ string) v1.MediaType {
 	switch typ {
 	case "movie":

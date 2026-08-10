@@ -8,9 +8,9 @@ import (
 	v1 "github.com/mosaic-media/sdk/contracts/platform/v1"
 )
 
-// These tests exercise the read provider roles (ADR 0027) against the hermetic
+// These tests exercise the read provider roles (sdk#2) against the hermetic
 // fake addon: search, catalog browse, metadata enrichment and stream
-// resolution. None touches a ContentService — reads do not write (ADR 0028).
+// resolution. None touches a ContentService — reads do not write (platform#18).
 
 func TestSearchReturnsVirtualCandidates(t *testing.T) {
 	server := fakeAddon(withStreams)
@@ -156,7 +156,7 @@ func TestStreamsCarryReleaseDetail(t *testing.T) {
 		t.Fatalf("streams = %d, want 1", len(resp.Streams))
 	}
 	s := resp.Streams[0]
-	// The quality, seeders and size are parsed out of the addon's title (ADR 0037).
+	// The quality, seeders and size are parsed out of the addon's title (module-stremio-addons#1).
 	if s.Quality != "1080p" {
 		t.Errorf("quality = %q, want 1080p", s.Quality)
 	}
@@ -169,8 +169,8 @@ func TestStreamsCarryReleaseDetail(t *testing.T) {
 	// The container and the two codecs (SDK v0.26.0). These were parsed and then
 	// dropped: StreamLink had nowhere to put them, so the same walk over the same
 	// text produced a richer answer for a Part than for a link, and the only
-	// place left to recover them was the URL — the leak ADR 0051 exists to stop.
-	// They are what ADR 0048's playability decision reads, so an empty one here
+	// place left to recover them was the URL — the leak module-stremio-addons#2 exists to stop.
+	// They are what platform#27's playability decision reads, so an empty one here
 	// is not neutral.
 	if s.Container != "mkv" {
 		t.Errorf("container = %q, want mkv", s.Container)

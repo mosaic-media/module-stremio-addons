@@ -34,7 +34,7 @@ too); they are normalised to the same base.
 a fresh install had metadata; that guarantee now belongs to
 [`module-cinemeta`](https://github.com/mosaic-media/module-cinemeta), a core
 module that cannot be switched off or misconfigured
-([ADR 0072](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0072-the-guaranteed-metadata-provider-needs-no-credential.md)).
+([module-cinemeta#1](https://github.com/mosaic-media/module-cinemeta/blob/main/docs/adr/0001-the-guaranteed-metadata-provider-needs-no-credential.md)).
 With nothing configured here, this module simply contributes nothing — Mosaic
 still has metadata and search. A settings document written before the change may
 still carry `disableDefaultAddons`; the key is ignored, so nothing needs
