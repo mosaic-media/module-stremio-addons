@@ -20,7 +20,7 @@ of that work alone.
 
 ## Context
 
-[platform#2](https://github.com/mosaic-media/platform/blob/main/docs/adr/0002-module-storage-and-delivery-model.md) already defines an inbound
+[architecture#2](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0002-repository-naming-convention.md) already defines an inbound
 module as an **anti-corruption layer** — that is the word in the naming table,
 and it is why a module is called `module-<system>`. The Stremio module has not
 been holding up that end of the bargain, and slice 1 produced a clean example of
@@ -129,7 +129,7 @@ the ecosystem's whole character is that anyone can host an addon.
   re-verify rather than write once is the discipline it needs.
 - **This generalises past Stremio.** Any future inbound module consuming an
   ecosystem with dialects — trackers, metadata providers — has the same shape
-  available, and [platform#2](https://github.com/mosaic-media/platform/blob/main/docs/adr/0002-module-storage-and-delivery-model.md)'s "module means ACL" stops being only a naming
+  available, and [architecture#2](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0002-repository-naming-convention.md)'s "module means ACL" stops being only a naming
   argument.
 
 ## Implementation implications
