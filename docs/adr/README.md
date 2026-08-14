@@ -13,9 +13,12 @@ A record is cited from another repository as `module-stremio-addons#N`, written 
 
 Decisions held elsewhere that these records cite. They bind work here and are not repeated — follow the link.
 
+**`architecture`**
+
+- [architecture#2](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0002-repository-naming-convention.md)
+
 **`platform`**
 
-- [platform#2](https://github.com/mosaic-media/platform/blob/main/docs/adr/0002-module-storage-and-delivery-model.md)
 - [platform#23](https://github.com/mosaic-media/platform/blob/main/docs/adr/0023-metadata-as-required-capability.md)
 - [platform#24](https://github.com/mosaic-media/platform/blob/main/docs/adr/0024-capability-gated-affordances.md)
 - [platform#27](https://github.com/mosaic-media/platform/blob/main/docs/adr/0027-stream-selection-against-a-client-profile.md)
