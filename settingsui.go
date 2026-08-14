@@ -61,7 +61,7 @@ func configureInput(addons []string) map[string]any {
 	}}
 }
 
-// addAddonSection is the add-by-URL form (contracts#12).
+// addAddonSection is the add-by-URL form (contracts#20).
 //
 // The action carries the addons that already exist; the form's scope contributes
 // the one being added, under `addAddon`. A form writes named fields and cannot
