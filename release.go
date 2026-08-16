@@ -7,19 +7,18 @@ import "strings"
 // matters, because the label is what a person choosing between two candidates by
 // hand actually reads.
 
-// perQualityCandidates bounds how many releases one item keeps *per resolution*.
+// perQualityCandidates bounds how many releases one item keeps per resolution.
 //
 // It replaces a flat head-of-list cap, which was actively harmful. An aggregator
 // ranks by quality descending, so taking the first N takes the largest and least
-// playable releases and discards everything else: for one film the source
-// offered 318 streams — 99 at 2160p, 141 at 1080p, 38 at 720p — and a cap of 40
-// kept forty 2160p releases and not a single one below it. Selection then had
-// nothing playable to choose from and the reported symptom was a browser
-// rendering Dolby Vision as purple and green.
+// playable releases and discards everything else: for one film offering 318
+// streams a cap of 40 kept forty 2160p releases and not a single one below them.
+// Selection then had nothing playable to choose from, and the reported symptom
+// was a browser rendering Dolby Vision as purple and green.
 //
-// The lesson generalises: a source's ranking answers "which is best", and
-// selection needs "which are *different*". Sampling across the range keeps the
-// set bounded without letting one resolution crowd out the rest.
+// A source's ranking answers "which is best"; selection needs "which are
+// different". Sampling across the range keeps the set bounded without letting
+// one resolution crowd out the rest.
 const perQualityCandidates = 12
 
 // selectCandidates samples a source's listing across resolutions, preserving the
@@ -27,8 +26,8 @@ const perQualityCandidates = 12
 //
 // An unparsed resolution gets its own bucket rather than being dropped: the
 // parse is best-effort, plenty of perfectly good releases carry no resolution in
-// their name, and discarding them would repeat the mistake this function exists
-// to fix on a different axis.
+// their name, and discarding them would repeat the same mistake on a different
+// axis.
 func selectCandidates(streams []Stream) []Stream {
 	seen := map[string]int{}
 	out := make([]Stream, 0, len(streams))

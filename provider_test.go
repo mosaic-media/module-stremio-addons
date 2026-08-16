@@ -166,12 +166,10 @@ func TestStreamsCarryReleaseDetail(t *testing.T) {
 	if s.SizeBytes != 2_300_000_000 {
 		t.Errorf("sizeBytes = %d, want 2.3e9", s.SizeBytes)
 	}
-	// The container and the two codecs (SDK v0.26.0). These were parsed and then
-	// dropped: StreamLink had nowhere to put them, so the same walk over the same
-	// text produced a richer answer for a Part than for a link, and the only
-	// place left to recover them was the URL — the leak module-stremio-addons#2 exists to stop.
-	// They are what platform#27's playability decision reads, so an empty one here
-	// is not neutral.
+	// The container and the two codecs are what platform#27's playability decision
+	// reads, so an empty one here is not neutral. Leaving them off a StreamLink
+	// while a Part carries them is the leak module-stremio-addons#2 exists to stop, because the
+	// only place left to recover the fact is the URL.
 	if s.Container != "mkv" {
 		t.Errorf("container = %q, want mkv", s.Container)
 	}
@@ -183,10 +181,10 @@ func TestStreamsCarryReleaseDetail(t *testing.T) {
 	}
 }
 
-// A link and the Part the same stream would be attached as must agree, because
-// they are the same parse: the fields exist on StreamLink so a consumer reading
-// a candidate sees what a consumer reading a Part sees. They disagreed for the
-// whole time StreamLink had nowhere to put them, and nothing reported it.
+// TestStreamLinkAgreesWithTheAttachedPart pins the module's two outbound paths
+// against each other. streamLinkFrom and attachStream run the same parse over
+// the same text, so a consumer reading a candidate must see what a consumer
+// reading a Part sees; nothing else reports it when they drift.
 func TestStreamLinkAgreesWithTheAttachedPart(t *testing.T) {
 	server := fakeAddon(withStreams)
 	defer server.Close()

@@ -11,12 +11,12 @@ import (
 )
 
 // TestModuleImportsOnlyPublishedContracts is the module boundary made
-// executable: the Stremio module must use only the published *contract* modules
-// — the SDK (mosaic-sdk) and the shared SDUI contract (mosaic-sdui, which a
-// module contributes settings UI with, sdk#4) — and the standard library. It
-// is a separate Go module, so Go itself already rejects a Platform-internal
-// import; this parse keeps the intent explicit and catches a third-party
-// dependency creeping in too (sdk#1, platform#12, contracts#3).
+// executable: the Stremio module must use only the published contract modules —
+// the SDK (mosaic-sdk) and the shared SDUI contract (mosaic-sdui, which a module
+// contributes settings UI with, sdk#4) — and the standard library. It is a
+// separate Go module, so Go itself already rejects a Platform-internal import;
+// this parse keeps the intent explicit and catches a third-party dependency
+// creeping in too (sdk#1, platform#12, contracts#3).
 func TestModuleImportsOnlyPublishedContracts(t *testing.T) {
 	const (
 		sdkPrefix      = "github.com/mosaic-media/sdk/"
@@ -27,10 +27,9 @@ func TestModuleImportsOnlyPublishedContracts(t *testing.T) {
 		selfPath = "github.com/mosaic-media/module-stremio-addons"
 	)
 
-	// Walked rather than a flat ReadDir of ".". The module gained a cmd/
-	// directory when it learned to run as its own process (platform#39), and a
-	// check that only looked at the root would have declared the boundary clean
-	// while never reading the one file that imports the harness.
+	// Walked rather than a flat ReadDir of ".": cmd/ is the one file that imports
+	// the harness (platform#39), and a check that only looked at the root would
+	// declare the boundary clean while never reading it.
 	var sources []string
 	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

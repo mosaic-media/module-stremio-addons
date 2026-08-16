@@ -2,10 +2,10 @@ package stremio
 
 import "testing"
 
-// Two sources describing the same film. `preferred` is what a user put first;
-// `fallback` is the bundled default. They disagree on prose, and only one of
-// them has artwork or a logo — the realistic shape, since addons differ in what
-// they populate rather than in which film they describe.
+// Two sources describing the same film: preferred is what a user put first,
+// fallback is next in the configured list. They disagree on prose, and only one
+// of them has artwork or a logo — the realistic shape, since addons differ in
+// what they populate rather than in which film they describe.
 var (
 	preferred = metaSource{
 		order: 0, addon: "TMDB", hasIdent: true, hasArt: false,
@@ -70,8 +70,8 @@ func TestIdentityIsNeverBlended(t *testing.T) {
 	}
 }
 
-// TestArtworkTravelsAsASet is the middle ground itself. The preferred source has
-// no artwork at all, so the whole set comes from the fallback — rather than a
+// TestArtworkTravelsAsASet covers the middle tier. The preferred source has no
+// artwork at all, so the whole set comes from the fallback — rather than a
 // poster from one source sitting beside a logo from another, which is the mixing
 // this tier prevents.
 func TestArtworkTravelsAsASet(t *testing.T) {
@@ -90,8 +90,8 @@ func TestArtworkTravelsAsASet(t *testing.T) {
 	}
 }
 
-// TestArtworkPrefersTheHigherPrioritySourceWhenItHasAny — the set rule must not
-// become "always take the fallback's artwork".
+// TestArtworkPrefersTheHigherPrioritySourceWhenItHasAny guards the set rule
+// against becoming "always take the fallback's artwork".
 func TestArtworkPrefersTheHigherPrioritySourceWhenItHasAny(t *testing.T) {
 	rich := preferred
 	rich.hasArt = true
@@ -109,7 +109,7 @@ func TestArtworkPrefersTheHigherPrioritySourceWhenItHasAny(t *testing.T) {
 	}
 }
 
-// TestSupplementaryListsUnionAcrossSources is where the enrichment actually
+// TestSupplementaryListsUnionAcrossSources covers the tier where the enrichment
 // lives: more cast and more genres are strictly better, with no coherence risk.
 func TestSupplementaryListsUnionAcrossSources(t *testing.T) {
 	out, prov := merge(preferred, fallback)
@@ -125,8 +125,8 @@ func TestSupplementaryListsUnionAcrossSources(t *testing.T) {
 	}
 }
 
-// TestMergeVideosMergesEpisodesByNumber — two sources describing the same
-// episode must enrich it rather than produce two of it.
+// TestMergeVideosMergesEpisodesByNumber pins that two sources describing the
+// same episode enrich it rather than producing two of it.
 func TestMergeVideosMergesEpisodesByNumber(t *testing.T) {
 	got := mergeVideos(
 		[]Video{{Season: 1, Episode: 1, Name: "Pilot"}},
@@ -143,9 +143,9 @@ func TestMergeVideosMergesEpisodesByNumber(t *testing.T) {
 	}
 }
 
-// TestUnionCreditsFillsAPersonRatherThanDuplicating — two sources listing the
-// same actor must produce one entry that gathers what each had, not two entries
-// with half the information each.
+// TestUnionCreditsFillsAPersonRatherThanDuplicating pins that two sources
+// listing the same actor produce one entry gathering what each had, not two
+// entries with half the information each.
 func TestUnionCreditsFillsAPersonRatherThanDuplicating(t *testing.T) {
 	got := unionCredits(
 		[]Credit{{Name: "Ryan Gosling"}},

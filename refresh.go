@@ -14,12 +14,11 @@ import (
 // release stops being cached, an aggregator's scrapers disagree from one minute
 // to the next. Re-importing is how a user asks for the current answer.
 //
-// It is deliberately **additive**. A release absent from today's listing has
-// usually not gone anywhere — the source simply did not return it this time —
-// and a stored candidate costs nothing to keep, while removing one risks
-// deleting the release someone is part-way through. Selection already skips
-// candidates that fail to resolve, so a dead entry is inert rather than
-// harmful.
+// It is deliberately additive. A release absent from today's listing has usually
+// not gone anywhere — the source simply did not return it this time — and a
+// stored candidate costs nothing to keep, while removing one risks deleting the
+// release someone is part-way through. Selection already skips candidates that
+// fail to resolve, so a dead entry is inert rather than harmful.
 
 // refreshCandidates adds any releases the source now offers that are not already
 // stored, leaving the containment tree alone.
@@ -103,9 +102,9 @@ func (c *Capability) refreshItem(ctx context.Context, client *Client, svc v1.Con
 
 // candidateKey identifies a release across refreshes.
 //
-// **Not the location URL.** A debrid link is minted per request and differs on
+// Never the location URL. A debrid link is minted per request and differs on
 // every fetch, so keying on it would find nothing already stored and re-attach
-// the entire listing each time. The release *identity* is what persists: the
+// the entire listing each time. The release identity is what persists: the
 // filename or release name, and failing that a magnet's info hash. That is the
 // same durable-versus-perishable split the resolution cache draws (platform#28),
 // one level down — the file is the durable thing, the way to fetch it is not.

@@ -19,8 +19,8 @@ import (
 //
 // It builds its clients directly rather than through clientFrom, which refuses
 // an empty addon list. That refusal is right for a provider role and wrong here:
-// with no bundled default, no addons configured is what a fresh install looks
-// like, and this screen is the only way out of it.
+// no addons configured is what a fresh install looks like, and this screen is
+// the only way out of it.
 func (c *Capability) SettingsUI(ctx context.Context, req v1.SettingsUIRequest) (v1.SettingsUIResponse, error) {
 	addons, err := addonsFrom(req.Settings)
 	if err != nil {
@@ -30,7 +30,7 @@ func (c *Capability) SettingsUI(ctx context.Context, req v1.SettingsUIRequest) (
 	// One client over the configured addons, so the manifest fetches the cards
 	// need are made and cached once.
 	client := NewClient(c.httpClient, addons...)
-	// A second over the configured addons *plus* Stremio's official directory,
+	// A second over the configured addons plus Stremio's official directory,
 	// which is what makes the browse grid non-empty on a fresh install. It is a
 	// discovery source only: nothing it returns is sourced from unless a user
 	// installs it.
@@ -64,7 +64,7 @@ func configureInput(addons []string) map[string]any {
 // addAddonSection is the add-by-URL form (contracts#20).
 //
 // The action carries the addons that already exist; the form's scope contributes
-// the one being added, under `addAddon`. A form writes named fields and cannot
+// the one being added, under addAddon. A form writes named fields and cannot
 // append to a list, so the append happens where it is cheap — in this module's
 // own reading of its settings — rather than as a list operation on the wire that
 // every client would have to implement identically.
@@ -85,8 +85,8 @@ func addAddonSection(addons []string) *ui.Element {
 // opens its own configuration page.
 //
 // With nothing configured it is an empty state rather than an empty grid. That
-// is now a state a real install starts in — there is no bundled addon any more —
-// so it has to say what to do next rather than look broken.
+// is the state a real install starts in, since this module bundles no addon, so
+// it has to say what to do next rather than look broken.
 func installedSection(ctx context.Context, client *Client, userAddons []string) *ui.Element {
 	if len(userAddons) == 0 {
 		return ui.Section("Installed addons",

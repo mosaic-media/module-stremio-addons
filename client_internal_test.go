@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+// TestNormaliseAddonURL pins that normalisation trims a suffix and never a path:
+// dropping the configuration segment would silently turn a configured addon into
+// a different one. The strem.io and strem.fun URLs are literals in this table —
+// normaliseAddonURL is pure string handling and nothing here dials them.
 func TestNormaliseAddonURL(t *testing.T) {
 	cases := []struct {
 		name string
@@ -35,11 +39,8 @@ func TestNormaliseAddonURL(t *testing.T) {
 }
 
 // TestAddonsAreOnlyWhatTheUserConfigured pins that this module bundles no addon
-// of its own.
-//
-// It used to bundle Cinemeta so a fresh install had metadata (platform#23). That
-// guarantee moved to `module-cinemeta`, a core module that cannot be switched
-// off (module-cinemeta#1), and leaving a second Cinemeta here would have shown every
+// of its own. Metadata on a fresh install is module-cinemeta's guarantee
+// (platform#23, module-cinemeta#1), and a second Cinemeta here would show every
 // title twice in search — the Platform unions search providers without
 // cross-provider dedup.
 func TestAddonsAreOnlyWhatTheUserConfigured(t *testing.T) {
@@ -52,8 +53,8 @@ func TestAddonsAreOnlyWhatTheUserConfigured(t *testing.T) {
 		return out
 	}
 
-	// No settings → nothing to source from, and that is an error rather than a
-	// silent empty answer. It is now the state a fresh install is in.
+	// No settings means nothing to source from, and that is an error rather than
+	// a silent empty answer. It is the state a fresh install is in.
 	if _, err := cap.clientFrom(nil); err == nil {
 		t.Fatal("clientFrom with no settings must error: this module bundles no addon")
 	}

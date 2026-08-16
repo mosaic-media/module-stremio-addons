@@ -41,8 +41,8 @@ func TestCandidateKeyDistinguishesDifferentReleases(t *testing.T) {
 	}
 }
 
-// TestCandidateKeyIgnoresLabelCasingAndPadding — the same release arriving with
-// different whitespace or casing must not read as new.
+// TestCandidateKeyIgnoresLabelCasingAndPadding pins that the same release
+// arriving with different whitespace or casing does not read as new.
 func TestCandidateKeyIgnoresLabelCasingAndPadding(t *testing.T) {
 	if candidateKey("  Thor.Ragnarok.MKV ", "x") != candidateKey("thor.ragnarok.mkv", "y") {
 		t.Error("keying is sensitive to casing or padding it should normalise away")
@@ -63,12 +63,12 @@ func TestInfoHashExtraction(t *testing.T) {
 	}
 }
 
-// TestSelectCandidatesSpansResolutions is the bug that cost the most time,
-// pinned. A flat head-of-list cap took the first N of a listing an aggregator
-// had ranked by quality descending — so it kept only the largest, least playable
-// releases and threw away every smaller one. Selection then had nothing it could
-// play, and the symptom reported was a browser rendering Dolby Vision as purple
-// and green.
+// TestSelectCandidatesSpansResolutions pins the sampling against the flat
+// head-of-list cap it replaced. That cap took the first N of a listing an
+// aggregator had ranked by quality descending, so it kept only the largest,
+// least playable releases and threw away every smaller one — selection had
+// nothing it could play, and the symptom reported was a browser rendering Dolby
+// Vision as purple and green.
 func TestSelectCandidatesSpansResolutions(t *testing.T) {
 	var listing []Stream
 	// The real shape: 4K first and plentiful, everything else below it.
@@ -98,9 +98,9 @@ func TestSelectCandidatesSpansResolutions(t *testing.T) {
 	}
 }
 
-// TestSelectCandidatesKeepsUnparsedReleases — the parse is best-effort, and a
-// release whose resolution it cannot read is not thereby a bad release.
-// Dropping those would repeat the same mistake on a different axis.
+// TestSelectCandidatesKeepsUnparsedReleases covers the other half: the parse is
+// best-effort, and a release whose resolution it cannot read is not thereby a
+// bad release. Dropping those would repeat the same mistake on a different axis.
 func TestSelectCandidatesKeepsUnparsedReleases(t *testing.T) {
 	got := selectCandidates([]Stream{
 		{Title: "Film 1080p x264"},

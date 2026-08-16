@@ -29,11 +29,9 @@ type resolvedAddon struct {
 	baseURL string
 	// order is the addon's position in the user's configured list, and it is the
 	// priority rule: the first addon a user lists is the one whose answer wins a
-	// conflict. Stremio settles the same question the same way — its community
-	// guidance to put metadata addons first only makes sense because ordering is
-	// the policy — and it is a better answer than any heuristic the module could
-	// apply to a manifest, because it is the user's actual preference rather
-	// than a guess about it.
+	// conflict. Stremio settles the same question the same way, and it is a
+	// better answer than any heuristic applied to a manifest, because it is the
+	// user's actual preference rather than a guess about it.
 	order    int
 	manifest Manifest
 	fetched  bool
@@ -63,10 +61,13 @@ func NewClient(httpClient *http.Client, addonURLs ...string) *Client {
 // prefix the client appends "/manifest.json", "/meta/..." and "/stream/..." to.
 // Stremio's "Install"/"Copy link" hands out the manifest URL (ending in
 // "/manifest.json"), and installs use the stremio:// scheme, so both are
-// accepted alongside a bare base URL. A trailing "/manifest.json" is stripped
-// rather than the whole path, preserving the configuration segment addons like
-// Torrentio encode before it (".../providers=.../manifest.json"). A trailing
-// slash is trimmed. Empty input yields "", which the caller skips.
+// accepted alongside a bare base URL. A trailing slash is trimmed. Empty input
+// yields "", which the caller skips.
+//
+// It trims a suffix and never a path. A trailing "/manifest.json" is stripped
+// but the configuration segment addons like Torrentio encode before it
+// (".../providers=.../manifest.json") is preserved: dropping the whole path
+// would silently turn a configured addon into a different one.
 func normaliseAddonURL(u string) string {
 	s := strings.TrimSpace(u)
 	if s == "" {
@@ -95,8 +96,8 @@ type Manifest struct {
 	Resources   []ResourceDecl `json:"resources"`
 	Types       []string       `json:"types"`
 	Catalogs    []CatalogDecl  `json:"catalogs"`
-	// AddonCatalogs are catalogs of *other addons* this addon exposes (the
-	// `addon_catalog` resource) — how a user discovers installable addons without
+	// AddonCatalogs are catalogs of other addons this addon exposes (the
+	// addon_catalog resource) — how a user discovers installable addons without
 	// a manifest URL (sdk#4).
 	AddonCatalogs []CatalogDecl      `json:"addonCatalogs"`
 	BehaviorHints addonBehaviorHints `json:"behaviorHints"`
@@ -128,24 +129,24 @@ type CatalogDecl struct {
 type ExtraDecl struct {
 	Name string `json:"name"`
 	// Options are the values the parameter accepts, when the addon says. An
-	// extra with none is a free-text parameter (`search`) or one whose values
-	// the caller must already hold (`lastVideosIds`); either way it cannot back
-	// a control built from a declared list, so it is not offered as a filter.
+	// extra with none is a free-text parameter (search) or one whose values the
+	// caller must already hold (lastVideosIds); either way it cannot back a
+	// control built from a declared list, so it is not offered as a filter.
 	Options []string `json:"options"`
-	// IsRequired is whether a listing *cannot be fetched* without this
+	// IsRequired is whether a listing cannot be fetched at all without this
 	// parameter. It is read so a catalog that needs an argument a browse surface
 	// cannot invent is skipped rather than rendered as a row that answers
 	// nothing.
 	IsRequired bool `json:"isRequired"`
 }
 
-// GenreOptions returns the values the catalog's `genre` extra accepts, empty
-// when it declares none.
+// GenreOptions returns the values the catalog's genre extra accepts, empty when
+// it declares none.
 //
-// **`genre` is the protocol's one general-purpose narrowing, and addons use it
-// for whatever they like.** Cinemeta puts *years* under it. That is fine here
-// precisely because the values are declared: the options are shown as labels and
-// sent back verbatim, and nothing in Mosaic ever has to decide what they mean.
+// genre is the protocol's one general-purpose narrowing, and addons use it for
+// whatever they like — Cinemeta puts years under it. That is workable only
+// because the values are declared: the options are shown as labels and sent back
+// verbatim, and nothing in Mosaic ever has to decide what they mean.
 func (c CatalogDecl) GenreOptions() []string {
 	for _, e := range c.Extra {
 		if e.Name == filterGenre {
@@ -159,10 +160,10 @@ func (c CatalogDecl) GenreOptions() []string {
 // listed without.
 func (c CatalogDecl) RequiresAnArgument() bool {
 	for _, e := range c.Extra {
-		// `search` being required means the catalog is a search endpoint rather
-		// than a browsable listing, and `genre` being required means the addon
-		// has hidden a mandatory argument behind the general-purpose name — both
-		// are catalogs a browse surface addressing an id alone cannot serve.
+		// search being required means the catalog is a search endpoint rather
+		// than a browsable listing, and genre being required means the addon has
+		// hidden a mandatory argument behind the general-purpose name — both are
+		// catalogs a browse surface addressing an id alone cannot serve.
 		if e.IsRequired {
 			return true
 		}
@@ -226,8 +227,8 @@ func (r *ResourceDecl) UnmarshalJSON(b []byte) error {
 
 // Meta is the subset of a meta response this client reads. For a series,
 // Videos lists the episodes, each carrying its season and episode number.
-// Logo/ImdbRating/Runtime/Cast/Links back the rich detail surface (sdk#3);
-// Cinemeta provides them all — the module simply decoded none of them before.
+// Logo/ImdbRating/Runtime/Cast/Links back the rich detail surface (sdk#3), and
+// Cinemeta provides them all.
 type Meta struct {
 	ID         string `json:"id"`
 	Type       string `json:"type"`
@@ -254,8 +255,8 @@ type Meta struct {
 	Links  []Link   `json:"links"`
 	Videos []Video  `json:"videos"`
 	// AppExtras is where an addon proxying a real metadata database puts credits
-	// that the base Stremio meta shape has no room for. `links` carries cast as
-	// a name and a search URL — no character, no photo — so an addon with better
+	// that the base Stremio meta shape has no room for. Links carries cast as a
+	// name and a search URL — no character, no photo — so an addon with better
 	// data has nowhere to put it and puts it here instead.
 	AppExtras AppExtras `json:"app_extras"`
 }
@@ -268,15 +269,15 @@ type AppExtras struct {
 	Writers   []Credit `json:"writers"`
 }
 
-// Credit is one person with the two things `links` cannot express: the
-// character they played, and a photograph of them.
+// Credit is one person with the two things Links cannot express: the character
+// they played, and a photograph of them.
 type Credit struct {
 	Name      string `json:"name"`
 	Character string `json:"character"`
 	Photo     string `json:"photo"`
 }
 
-// Link is one entry of a meta's `links` array — the modern Cinemeta shape that
+// Link is one entry of a meta's links array — the modern Cinemeta shape that
 // carries cast, directors, writers and genres as categorised references.
 type Link struct {
 	Name     string `json:"name"`
@@ -350,8 +351,8 @@ func (s Stream) text() string {
 	return strings.Join([]string{s.Title, s.Name, s.Description, s.BehaviorHints.Filename}, "\n")
 }
 
-// Subtitle is the subset of a subtitles response entry this client reads (ADR
-// 0037): a track's language and the file URL.
+// Subtitle is the subset of a subtitles response entry this client reads
+// (module-stremio-addons#1): a track's language and the file URL.
 type Subtitle struct {
 	ID   string `json:"id"`
 	URL  string `json:"url"`
@@ -364,9 +365,10 @@ type Subtitle struct {
 func (c *Client) Meta(ctx context.Context, typ, id string) (Meta, bool, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
-			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (sdk#4).
+			// An addon whose manifest cannot be fetched (unreachable, mis-typed
+			// URL) is skipped rather than failing the whole operation, so one bad
+			// addon does not blank search, browse, or metadata (sdk#4). Every
+			// addon loop in this file does the same.
 			continue
 		}
 		if !supports(a.manifest, "meta", typ, id) {
@@ -439,9 +441,7 @@ func (c *Client) Streams(ctx context.Context, typ, id string) ([]Stream, error) 
 func (c *Client) Stream(ctx context.Context, typ, id string) (Stream, bool, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
-			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (sdk#4).
+			// One bad addon must not blank the whole answer (sdk#4).
 			continue
 		}
 		if !supports(a.manifest, "stream", typ, id) {
@@ -519,9 +519,7 @@ func (c *Client) Catalogs(ctx context.Context) ([]CatalogDecl, error) {
 	var out []CatalogDecl
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
-			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (sdk#4).
+			// One bad addon must not blank the whole answer (sdk#4).
 			continue
 		}
 		out = append(out, a.manifest.Catalogs...)
@@ -544,26 +542,24 @@ const catalogPage = 100
 // already checked the value against what that catalog declared. It returns nil,
 // no error, when no configured addon declares the catalog.
 //
-// It also reports whether another page exists. That is the **weaker** of the two
-// statements SDK v0.25.0 describes — a full page rather than a reported total —
-// and it is still the provider's to make, because only the provider knows the
-// page size. Its cost is one empty fetch at the end of an exactly-full catalog.
+// It also reports whether another page exists, inferred from a full page rather
+// than from a reported total, because no addon reports one. Only the provider
+// knows the page size, so the statement is the provider's to make. Its cost is
+// one empty fetch at the end of an exactly-full catalog.
 func (c *Client) CatalogItems(ctx context.Context, typ, id, genre string, skip int) ([]MetaPreview, bool, error) {
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
-			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (sdk#4).
+			// One bad addon must not blank the whole answer (sdk#4).
 			continue
 		}
 		if !hasCatalog(a.manifest, typ, id) {
 			continue
 		}
 		u := a.baseURL + "/catalog/" + typ + "/" + id
-		// Extras are path segments, `name=value` joined by `&`, before the
-		// `.json`. The value is path-escaped: a genre is somebody else's
-		// vocabulary and "Sci-Fi & Fantasy" is a real one, which unescaped would
-		// read as a second extra.
+		// Extras are path segments, name=value joined by "&", before the ".json".
+		// The value is path-escaped: a genre is somebody else's vocabulary and
+		// "Sci-Fi & Fantasy" is a real one, which unescaped would read as a second
+		// extra.
 		var extras []string
 		if genre != "" {
 			extras = append(extras, filterGenre+"="+url.PathEscape(genre))
@@ -612,9 +608,7 @@ func (c *Client) Search(ctx context.Context, query string) ([]MetaPreview, error
 	seen := make(map[string]bool)
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
-			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (sdk#4).
+			// One bad addon must not blank the whole answer (sdk#4).
 			continue
 		}
 		for _, cat := range a.manifest.Catalogs {
@@ -641,8 +635,8 @@ func (c *Client) Search(ctx context.Context, query string) ([]MetaPreview, error
 	return out, nil
 }
 
-// AddonCatalogEntry is one installable addon a catalog of addons lists (ADR
-// 0038): its transport (manifest) URL and enough of its manifest to name it.
+// AddonCatalogEntry is one installable addon a catalog of addons lists
+// (sdk#4): its transport (manifest) URL and enough of its manifest to name it.
 type AddonCatalogEntry struct {
 	TransportURL string   `json:"transportUrl"`
 	Manifest     Manifest `json:"manifest"`
@@ -690,9 +684,7 @@ func (c *Client) AddonCatalog(ctx context.Context) ([]AddonCatalogEntry, error) 
 	seen := make(map[string]bool)
 	for _, a := range c.addons {
 		if err := c.ensureManifest(ctx, a); err != nil {
-			// An addon whose manifest cannot be fetched (unreachable, mis-typed URL)
-			// is skipped rather than failing the whole operation, so one bad addon
-			// does not blank search, browse, or metadata (sdk#4).
+			// One bad addon must not blank the whole answer (sdk#4).
 			continue
 		}
 		for _, cat := range a.manifest.AddonCatalogs {
@@ -789,13 +781,14 @@ type streamMeta struct {
 	// container, videoCodec and audioCodec are what a consumer needs to know
 	// whether a client can play this at all (platform#27). They are parsed here, at
 	// the boundary, rather than left for something downstream to infer from a
-	// URL — which is exactly the leak module-stremio-addons#2 names: the container hint has
-	// already been found hiding in a query parameter, where no consumer should
-	// have been looking for it.
+	// URL — the leak module-stremio-addons#2 names, and the container hint has already been
+	// found hiding in a query parameter where no consumer should have had to
+	// look for it. An empty one is not neutral.
 	//
-	// Best-effort like the rest: this makes a candidate list *rankable*. What a
-	// release actually contains is settled by probing the bytes before it plays
-	// (platform#29), because release text lies and this cannot see inside a file.
+	// Best-effort like the rest: this makes a candidate list rankable before
+	// anything is fetched. What a release actually contains is settled by probing
+	// the bytes before it plays (platform#29), because release text lies and this
+	// cannot see inside a file.
 	container  string
 	videoCodec string
 	audioCodec string
@@ -929,10 +922,11 @@ func sizeToBytes(num, unit string) int64 {
 	return 0
 }
 
-// userAgent identifies this client to addons. It matters for reachability, not
-// just courtesy: Cloudflare-fronted addons (Torrentio and many popular stream
-// addons) reject Go's default "Go-http-client/1.1" User-Agent with a 403, while
-// any honest custom identifier is served. So this is set on every request.
+// userAgent identifies this client to addons. It is load-bearing for
+// reachability rather than courtesy: Cloudflare-fronted addons (Torrentio and
+// many popular stream addons) reject Go's default "Go-http-client/1.1" with a
+// 403 while serving any honest custom identifier. getJSON sets it on every
+// request.
 var userAgent = "mosaic-module-stremio/" + moduleVersion
 
 func (c *Client) getJSON(ctx context.Context, url string, out interface{}) error {

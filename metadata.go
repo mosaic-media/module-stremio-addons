@@ -7,34 +7,30 @@ import (
 	"sync"
 )
 
-// Unioning metadata across addons.
+// Unioning metadata across addons. Every configured addon is queried
+// concurrently rather than taking the first that answers, which would make the
+// result an accident of list order.
 //
-// The module used to take the first addon that answered, which made the result
-// an accident of list order — and with a bundled Cinemeta prepended (as there
-// was then), it always won and every richer source a user had deliberately
-// installed was never even asked. Every configured addon is now queried
-// concurrently.
+// How the answers combine is a tiered rule, not a flat merge, and the tiers are
+// drawn around what has to stay internally consistent:
 //
-// **How the answers combine is a tiered rule, not a flat merge**, and the tiers
-// are drawn around what has to stay internally consistent:
-//
-//   - **Identity** — title, year, overview, runtime, rating — is never blended.
-//     It comes whole from the highest-priority source that answered. A record
+//   - Identity — title, year, overview, runtime, rating — is never blended. It
+//     comes whole from the highest-priority source that answered. A record
 //     assembled from two sources' prose reads as wrong in a way a gap does not,
 //     and this is the behaviour Stremio itself has.
-//   - **Artwork** travels as a *set*. Poster, backdrop and logo come from the
-//     first source that supplies any of them, so a regional poster never ends up
+//   - Artwork travels as a set. Poster, backdrop and logo come from the first
+//     source that supplies any of them, so a regional poster never ends up
 //     beside another source's English logo — while a source carrying no artwork
-//     at all still costs you none.
-//   - **Supplementary lists** — cast, genres, episodes — union freely. They are
+//     at all still costs nothing.
+//   - Supplementary lists — cast, genres, episodes — union freely. They are
 //     additive by nature: more cast is strictly better, and two sources
 //     describing one episode enrich it rather than conflict. This is where the
-//     actual enrichment lives.
+//     enrichment lives.
 //
-// The risk this guards against is narrower than it first looks: every addon is
-// asked about the same IMDB id, so they describe the same title. What differs is
-// edition, region and language variants — which is exactly what the artwork tier
-// keeps from mixing.
+// The risk this guards against is narrower than it looks: every addon is asked
+// about the same IMDB id, so they describe the same title. What differs is
+// edition, region and language variants — which is what the artwork tier keeps
+// from mixing.
 
 // metaSource pairs one addon's answer with its configured rank.
 type metaSource struct {
@@ -45,9 +41,10 @@ type metaSource struct {
 	hasIdent bool
 }
 
-// MetaMerged asks every addon that serves `meta` and combines their answers by
-// the tiered rule above. It also reports which addon supplied each tier, so an
-// odd-looking detail screen is an answerable question rather than a guess.
+// MetaMerged asks every addon that serves the meta resource and combines their
+// answers by the tiered rule above. It also reports which addon supplied each
+// tier, so an odd-looking detail screen is an answerable question rather than a
+// guess.
 func (c *Client) MetaMerged(ctx context.Context, typ, id string) (Meta, MetaProvenance, bool, error) {
 	var (
 		mu      sync.Mutex
@@ -141,10 +138,8 @@ func (c *Client) MetaMerged(ctx context.Context, typ, id string) (Meta, MetaProv
 }
 
 // MetaProvenance records which addon supplied each tier of a merged record.
-//
-// It costs almost nothing and turns "why does this look odd" into something
-// answerable. Metadata assembled from several sources is exactly the kind of
-// thing that is hard to debug after the fact without it.
+// Metadata assembled from several sources is hard to debug after the fact
+// without it.
 type MetaProvenance struct {
 	Identity     string
 	Artwork      string

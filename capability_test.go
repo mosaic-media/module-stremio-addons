@@ -15,11 +15,11 @@ import (
 )
 
 // These tests run the capability against a hermetic fake Stremio addon over
-// httptest and an in-memory ContentService. They prove the module's own
-// behaviour — the mapping of Stremio meta and streams onto the Platform's
-// graph, and that streams are opt-in by the addon's declared resources. The
-// end-to-end path through the Platform registry and real PostgreSQL is a
-// separate test in the platform repo.
+// httptest and an in-memory ContentService. They cover the module's own
+// behaviour — the mapping of Stremio meta and streams onto the Platform's graph,
+// and that streams are opt-in by the addon's declared resources. The end-to-end
+// path through the Platform registry and real PostgreSQL is a separate test in
+// the platform repository.
 
 func TestImportMovie(t *testing.T) {
 	server := fakeAddon(withStreams)
@@ -162,8 +162,8 @@ func TestImportRejectsWhenNoAddonConfigured(t *testing.T) {
 	cap := stremio.New(nil)
 	// This module bundles no addon of its own (module-cinemeta#1), so "nothing
 	// configured" is the state a fresh install is in and an import in it must be
-	// refused rather than quietly doing nothing. It is also what keeps this test
-	// hermetic: there is no default to reach for over the network.
+	// refused rather than quietly doing nothing. That is also what keeps this
+	// test hermetic: there is no default to reach for over the network.
 	_, err := cap.Import(context.Background(), newFakeContent(), v1.ImportRequest{
 		Caller: v1.CallerFromSession("s-1"), Ref: movieRef("tt1254207"),
 	})
@@ -254,7 +254,7 @@ func fakeAddon(mode addonMode) *httptest.Server {
 		// Catalog listing and search share a prefix; both return meta previews
 		// of the type in the path, so browse and search exercise both types.
 		case strings.HasPrefix(path, "/catalog/movie/"):
-			// The *escaped* path, which is the wire form. r.URL.Path is already
+			// The escaped path, which is the wire form. r.URL.Path is already
 			// decoded, and asserting on that would pass whether or not the value
 			// was escaped — which is the whole thing worth checking for a genre
 			// containing an ampersand.
@@ -377,12 +377,11 @@ func (f *fakeContent) AddContentChild(_ context.Context, cmd v1.AddContentChildC
 	return v1.AddContentChildResult{Node: n}, nil
 }
 
-// The technical fields are carried across rather than dropped. They were
-// dropped, and that made the fake unable to observe the thing this module is
-// most responsible for: it fills Container, VideoCodec and AudioCodec at the
-// boundary (module-stremio-addons#2) precisely because an empty one is not neutral downstream,
-// and a fake that discarded them meant no test here could tell a filled field
-// from an empty one.
+// AttachContentPart carries the technical fields across rather than dropping
+// them. The module fills Container, VideoCodec and AudioCodec at the boundary
+// (module-stremio-addons#2) because an empty one is not neutral downstream, and a fake that
+// discarded them would leave no test here able to tell a filled field from an
+// empty one.
 func (f *fakeContent) AttachContentPart(_ context.Context, cmd v1.AttachContentPartCommand) (v1.AttachContentPartResult, error) {
 	p := v1.Part{
 		ID: v1.PartID(f.nextID("part")), NodeID: cmd.NodeID,
@@ -395,10 +394,10 @@ func (f *fakeContent) AttachContentPart(_ context.Context, cmd v1.AttachContentP
 	return v1.AttachContentPartResult{Part: p}, nil
 }
 
-// SetContentArtwork arrived with SDK v0.21.0 (platform#47's candidate set). This
-// module writes no artwork of its own — a Stremio addon supplies whatever
-// poster it happens to carry through the metadata path — so the fake satisfies
-// the interface and records nothing.
+// SetContentArtwork is part of platform#47's candidate set. This module writes no
+// artwork of its own — a Stremio addon supplies whatever poster it happens to
+// carry through the metadata path — so the fake satisfies the interface and
+// records nothing.
 func (f *fakeContent) SetContentArtwork(_ context.Context, cmd v1.SetContentArtworkCommand) (v1.SetContentArtworkResult, error) {
 	return v1.SetContentArtworkResult{Node: v1.Node{ID: cmd.NodeID, Artwork: cmd.Artwork}}, nil
 }
@@ -456,9 +455,9 @@ func (f *fakeContent) ResolveContentBinding(context.Context, v1.ResolveContentBi
 	return v1.ResolveContentBindingResult{}, nil
 }
 
-// The playback-state surface (SDK v0.14.0). This module does not touch it — it
-// sources content, it does not consume playback — so the fake only has to
-// satisfy the interface the grown ContentService now declares.
+// The playback-state surface. This module does not touch it — it sources
+// content, it does not consume playback — so the fake only has to satisfy the
+// interface ContentService declares.
 func (f *fakeContent) RecordPlaybackProgress(context.Context, v1.RecordPlaybackProgressCommand) (v1.RecordPlaybackProgressResult, error) {
 	return v1.RecordPlaybackProgressResult{}, nil
 }
@@ -663,7 +662,7 @@ func TestANarrowedCatalogPutsTheGenreOnTheWire(t *testing.T) {
 	}
 }
 
-// An addon answers an unknown genre with the *unfiltered* listing, so passing a
+// An addon answers an unknown genre with the unfiltered listing, so passing a
 // value through unchecked returns a plausible page for a question nobody asked.
 func TestAnUndeclaredNarrowingIsRefused(t *testing.T) {
 	addon := fakeAddon(withStreams)
