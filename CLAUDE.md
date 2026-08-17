@@ -1,333 +1,149 @@
 # Claude Instructions — module-stremio-addons
 
+Fleet-wide conventions — commits, decision records, citation form, the roadmap —
+are in [`architecture`](https://github.com/mosaic-media/architecture/blob/main/CLAUDE.md).
+This file is what is specific to `module-stremio-addons`.
+
 This repository is a **host for Stremio addons**: a user pastes an addon's
-manifest URL and Mosaic sources from it. The addon ecosystem is community-made
-and unreviewed, so what this module can reach is whatever a user chooses to add
-to it — which is the module's premise, not a caveat about it.
+manifest URL into the module's settings and Mosaic sources from whatever that
+addon declares. What this module can reach is whatever a user chose to add to it
+— the premise, not a caveat about it.
 
-It is an **extension** module
-([architecture#3](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0003-two-module-tiers.md)):
-nothing requires it, it is **not a dependency of the Platform**, and a Platform
-gains it only when a user installs it from the signed registry index
-([platform#51](https://github.com/mosaic-media/platform/blob/main/docs/adr/0051-extension-installation-is-user-initiated-and-persistent.md),
-[platform#40](https://github.com/mosaic-media/platform/blob/main/docs/adr/0040-module-distribution-and-trust.md)).
-`cmd/module-stremio-addons` is what serves it out of process
-([platform#39](https://github.com/mosaic-media/platform/blob/main/docs/adr/0039-extension-module-boundary.md),
-[sdk#7](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0007-go-plugin-as-the-extension-harness.md)),
-and it is deliberately one line: **this module builds and behaves identically
-whether or not that file is used.** `stremio.New` remains what a host calls, and
-the tests run with no transport at all.
+It is an **extension module**: nothing requires it, and a Platform gains it only
+when a user installs it from the signed registry index. The evidence is in this
+repository — `release.yml` cross-compiles binaries and a `manifest.json` and
+dispatches `module-released` at the registry instead of moving a `require` line
+anywhere, and `cmd/module-stremio-addons` serves it out of process. **`README.md`
+and `cmd/module-stremio-addons/main.go` both still say the Platform composes this
+module statically; both sentences are stale.**
 
-It is built exactly as a third party's module would be. "Official" describes only
-its authorship, not its shape; the discipline is the point.
+## What it declares, and how it refuses
 
-## The boundary is the point
+`Capability.Manifest` in `capability.go` declares `RoleMetadata`, `RoleSearch`,
+`RoleCatalog`, `RoleStream`, `RoleSubtitles` and `RoleSettingsUI`. The
+compile-time assertions above it fail the build if a declared role loses its
+method; keep them in step with the manifest.
 
-- **Import only [`sdk`](https://github.com/mosaic-media/sdk),
-  [`contracts`](https://github.com/mosaic-media/contracts) and the standard
-  library.** `boundary_test.go` parses every import and fails on anything else.
-  It **walks** the tree rather than reading the root directory, because a check
-  that looked only at the root would declare the boundary clean while never
-  reading `cmd/`, the one file that imports the harness. `contracts` is allowed
-  because this module authors its own settings screen
-  ([sdk#4](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0004-module-contributed-settings-ui.md))
-  — it declares a *form*, not a screen.
-- **`sdk/host` sits under the SDK prefix, and that is correct.** The harness is
-  published beside the contract precisely so a module needs no dependency the
-  SDK did not already sanction.
-- **Nothing may be written to stdout.** go-plugin writes its handshake there and
-  anything else corrupts it. Use the ambient telemetry (below); do not print.
-- **The `Caller` is a handle, not a session.** It is minted per invocation and
-  stops resolving when that invocation returns, so it cannot usefully be stored.
-  Forward what you were given.
-- **MIT-licensed**, the author's choice, unlike the Platform's AGPL
-  ([architecture#1](https://github.com/mosaic-media/architecture/blob/main/docs/adr/0001-licensing.md)).
-  Files here carry **no SPDX header** — match the files already present rather
-  than importing the Platform's convention.
+- **No configured addon is an error**, not an empty answer: `clientFrom` refuses,
+  because every provider role needs something to ask.
+- **`SettingsUI` deliberately bypasses `clientFrom`.** No addons is what a fresh
+  install looks like and that screen is the only way out of it, so it builds its
+  clients directly. Do not "tidy" it onto `clientFrom`.
+- **`Streams` and `Subtitles` return an empty response with no error** when
+  `addressOf` cannot address the ref — every stream provider is asked about
+  content some other module sourced.
 
-## This module is an anti-corruption layer, and that is its job
+## The boundary
 
-Upstream dialects are translated **here**, at the boundary, into the SDK's typed
-fields. The Platform must never learn a provider's quirks
-([module-stremio-addons#2](docs/adr/0002-modules-as-anti-corruption-layers.md)).
+`boundary_test.go` parses every non-test import and allows only the standard
+library, `sdk/…`, `contracts/…` and this module's own path; `contracts` is
+allowed because the module authors its own settings screen.
 
-**What exists today is one universal parse, not a per-source one.**
-`parseStreamMeta` applies a single set of regexes — quality, container, video
-codec, audio codec, seeders, size — to every addon's free text, and reads no
-manifest id at all. The one place a manifest id *is* keyed on is
-`deniedAddonIDs`, which hides non-content overlay and status addons from the
-browse grid: **that is a deny list, not a dialect.** So a new spelling seen in
-the wild is a new alternative in the existing regex, and a per-source extractor
-is a decision rather than an edit — read
-[module-stremio-addons#2](docs/adr/0002-modules-as-anti-corruption-layers.md)
-and its `**Status:**` line for what it decided and where that stands, rather than
-restating it here.
+**It walks the tree rather than reading the root**, deliberately:
+`cmd/module-stremio-addons/main.go` is the one file that imports `sdk/host`, and
+a check reading only the package directory would declare the boundary clean while
+never opening it. Keep the walk. That command file is one line by design — the
+module builds and behaves identically whether or not it is used, and
+`stremio.New` stays what a host calls.
 
-**Fill the typed fields rather than leaving them empty.** `Container`,
-`VideoCodec` and `AudioCodec` are what a playability decision reads
-([platform#27](https://github.com/mosaic-media/platform/blob/main/docs/adr/0027-stream-selection-against-a-client-profile.md)),
-and an empty field is not neutral: they were left empty once and the Platform
-would have relayed ten gigabytes of Matroska to a browser. **Both outbound paths
-must stay in step** — `attachStream` filling an
-`AttachContentPartCommand`, and `streamLinkFrom` filling a `StreamLink`. The same
-walk over the same text producing a richer answer for a Part than for a link is
-exactly the leak that record names, because the only place left to recover the
-fact was the URL.
+**The `Caller` is a handle, not a session.** The Platform mints it per invocation
+and revokes it on return, so it stops resolving the instant that invocation
+returns and cannot usefully be stored. Forward the one you were given.
 
-**Best-effort is the honest frame.** This makes a candidate list *rankable*
-before anything is fetched; what a release actually contains is settled by
-probing the bytes
-([platform#29](https://github.com/mosaic-media/platform/blob/main/docs/adr/0029-probing-and-the-per-stream-playback-decision.md)),
-because release text lies. Normalise onto the names ffprobe uses so a parsed
-guess and a probed fact are comparable.
+## Settings
 
-## Rules the source's own shape forces
+User-managed opaque JSON, handed in on every invocation; this module owns their
+meaning. `moduleSettings` in `capability.go` is the shape: `addons`, plus
+`addAddon` — a single pending addition, because a form submits *values* and
+appending to a list is not writing a field. `addonsFrom` folds it in and dedupes,
+and unknown keys are ignored, so an older document needs no migration.
+`configureModule` replaces the whole document, so every control sends the
+complete addon list (`configureInput`).
 
-- **Resource-aware, so streams do not gate metadata.** Use whatever resources
-  each configured addon declares. A meta-only addon must yield metadata with
-  **no Parts**, so a user can enrich local media without adopting remote
-  streaming.
-- **Sample candidates across resolutions; never take the head of the list.**
-  `perQualityCandidates` bounds how many releases an item keeps *per resolution*.
-  It replaced a flat cap that was actively harmful: an aggregator ranks by
-  quality descending, so for one film offering 318 streams a cap of 40 kept forty
-  2160p releases and not one below them. Selection had nothing playable to choose
-  from, and the reported symptom was a browser rendering Dolby Vision as purple
-  and green. A source's ranking answers "which is best"; selection needs "which
-  are *different*". An unparsed resolution keeps its own bucket rather than being
-  dropped.
-- **Refresh is additive.** A release absent from today's listing has usually not
-  gone anywhere — the source simply did not return it — and a stored candidate
-  costs nothing to keep while removing one risks deleting the release someone is
-  part-way through. It walks one level only: refreshing every episode of a
-  long-running series is one round trip per episode, which is not something to do
-  behind a single click without asking.
-- **Content is bound under `imdb`.** Stremio ids *are* IMDb ids, and the accurate
-  scheme is what makes a title added here the same Work as one another source
-  added rather than a duplicate. Changing it would silently double a library.
-- **Settings are user-managed opaque JSON** handed in by the Platform
-  ([platform#17](https://github.com/mosaic-media/platform/blob/main/docs/adr/0017-module-settings.md)),
-  not env vars and not Platform config. This module owns their meaning. `AddAddon`
-  exists because a form submits *values*: appending to a list is not writing a
-  field, so the document carries the pending addition and this module folds it in
-  — which keeps the append here rather than putting a list operation on the wire
-  for every client to implement identically.
-- **The addon catalog source is a discovery surface, never a content source.** It
-  is reached directly by `browseSection` and must never be merged into the addons
-  the provider roles read.
+**Configured order is the priority order.** `MetaMerged` sorts by it and takes
+identity whole from the first source that has one, artwork as a set from the
+first that has any, and unions the supplementary lists.
 
-## Two bugs worth knowing, because both fail silently
+## Reading what a user pasted, and what an addon sent
 
-Both were found against real addons in use, and both are now pinned by hermetic
-tests. Neither is a reason to reach the network from this suite.
+- **`normaliseAddonURL` trims a suffix, never a path.** It accepts `stremio://`,
+  drops a query or fragment and strips a trailing `/manifest.json` and slashes,
+  but preserves the configuration segment an addon encodes before it, so
+  `https://host/providers=yts/manifest.json` becomes `https://host/providers=yts`
+  — dropping the path would silently turn a configured addon into a different
+  one. The table in `client_internal_test.go` is the pin; its `strem.io` and
+  `strem.fun` strings are literals and nothing dials them.
+- **One universal parse, not a per-source one.** `parseStreamMeta` applies the
+  same regexes to every addon's free text and reads no manifest id. A new
+  spelling seen in the wild is a new alternative in an existing pattern; a
+  per-source extractor is a decision, not an edit. Normalise onto the names
+  ffprobe uses so a parsed guess and a probed fact compare.
+- **The two outbound paths must stay in step.** `attachStream` fills an
+  `AttachContentPartCommand` and `streamLinkFrom` fills a `StreamLink` from the
+  same parse. `Container`, `VideoCodec` and `AudioCodec` are what a playability
+  decision reads, and an empty field is not neutral.
+- **`selectCandidates` bounds how many releases an item keeps *per resolution*.**
+  A source ranks by quality descending, so a flat head-of-list cap keeps only the
+  largest and least playable ones and selection has nothing playable to choose
+  from. An unparsed resolution keeps its own bucket rather than being dropped.
+- **Refresh is additive and walks one level.** `refreshCandidates` adds what the
+  source now offers and removes nothing, and stops after the work's first item
+  child rather than making a round trip per episode of a series.
+- **`deniedAddonIDs` is a deny list, not a dialect** — the one place a manifest
+  id is keyed on, and only to hide non-content addons from the browse grid.
 
-- **Normalisation trims a suffix, never a path.** `normaliseAddonURL` strips a
-  trailing `/manifest.json` and accepts the `stremio://` scheme, and it preserves
-  the configuration segment addons encode before it
-  (`.../providers=.../manifest.json`). A normaliser that dropped the whole path
-  would silently turn a configured addon into a different one. The table in
-  `client_internal_test.go` is the pin, and the `strem.io`/`strem.fun` strings in
-  it are **literals in that table** — nothing dials them.
-- **The User-Agent is load-bearing for reachability.** Cloudflare-fronted addons
-  reject Go's default `Go-http-client/1.1` with a 403 while serving any honest
-  custom identifier, so `getJSON` sets one on every request.
-  `TestClientSetsUserAgent` asserts both that ours is sent and that the Go
-  default is not.
+- **The User-Agent is load-bearing for reachability.** `getJSON` sets it on every
+  request because Cloudflare-fronted addons answer Go's default
+  `Go-http-client/1.1` with a 403. `TestClientSetsUserAgent` asserts both that
+  ours is sent and that the Go default is not.
+- **`addonCatalogSource` is a discovery surface, never a content source** —
+  reached only by `browseSection`, never merged into the addons the roles read.
+- **Content is bound under `imdb`** (`providerScheme`). Stremio ids *are* IMDb
+  ids, so that scheme is what makes a title added here the same Work another
+  IMDb-keyed source added rather than a duplicate; changing it doubles a library.
 
-## Everything runs in the container, nothing runs on the host
-
-**Do not run `go build`, `go test`, `go vet` or `gofmt` directly on this
-machine.** This repository's gate runs inside its test container:
+## The gate
 
 ```bash
 docker compose -f docker-compose.test.yml run --rm test
 ```
 
-That runs gofmt, `go build ./...`, `go vet ./...` and `go test ./...` against the
-Go version pinned in `docker-compose.test.yml`, which must stay equal to the one
-in `go.mod`. `.github/workflows/verify.yml` runs the same four steps — **keep the
-two in step.** Append `bash` for a shell in the same environment.
+That is the record-index check, the citation lint, gofmt, `go build`, `go vet`
+and `go test`, against the Go version pinned in the compose file — keep that
+version equal to `go.mod`'s. Append `bash` for a shell in the same environment.
+`.github/workflows/verify.yml` runs the same checks on a `setup-go` runner and is
+what refuses a push; keep the two in step.
 
-**What the container protects is the boundary.** A host with a populated module
-cache, a leftover `go.work` or a stray `replace` can satisfy an import a third
-party's machine could not, and `boundary_test.go` still passes because the import
-resolved. The container resolves from the proxy exactly as a consumer does.
+Do not run any of them on the host: a populated module cache, a leftover
+`go.work` or a stray `replace` can satisfy an import a third party's machine
+could not, and `boundary_test.go` passes anyway because the import resolved.
 
-**The suite is hermetic, and must stay that way.** Every HTTP test stands up an
-`httptest` server and points the client at it; nothing here reaches an addon.
-That is not a compromise to undo — the addons are somebody else's service, a
-suite that depends on one is red when they deploy, and the two bugs above are
-already regression-tested without egress. *`docker-compose.test.yml`'s header
-still describes this suite as reaching real addons over TLS and warns about
-`ca-certificates`; that comment is stale and the suite it describes does not
-exist.*
+**The suite is hermetic** — every HTTP test stands up an `httptest` server, and
+the capability tests pair it with an in-memory `ContentService`. Keep it that
+way; the addons are somebody else's service. *`docker-compose.test.yml`'s header
+comment still describes the suite as reaching real addons over TLS; it is stale.*
 
-## Versioning and release
+## Release
 
-A change is a **minor** bump, tagged and pushed. **Nothing bumps a `require`
-afterwards** — the Platform does not depend on this module, so there is no
-version line anywhere to move. A release reaches people through the
-**catalogue**: `release.yml` proves the tag resolvable, its `binaries` job
-cross-compiles and assembles a `manifest.json` carrying each binary's digest,
-and its `dispatch` job tells the registry there is a new version to list.
+A change is a minor bump, tagged and pushed; **a `replace` must never land in a
+commit**, and the version is read from the build graph by `v1.ModuleVersion`
+rather than held in a constant. Nothing bumps a `require` afterwards.
 
-Three things about that chain, each of which has already been got wrong:
+`release.yml` reuses `verify.yml`, proves the tag resolvable through the public
+proxy, cross-compiles binaries and a `manifest.json` in `binaries`, then
+dispatches `module-released` at `mosaic-media/registry`. **`dispatch` needs
+`[release, binaries]`**, because the registry catalogues by downloading that
+`manifest.json` from the release assets; it fails rather than warns when
+`REGISTRY_DISPATCH_TOKEN` is unset.
 
-- **`dispatch` waits on `binaries`, not just `release`.** The registry
-  catalogues a release by downloading `manifest.json` from its assets, so a
-  dispatch that fired earlier would point the catalogue at a release whose assets
-  are still uploading, and the entry would be refused for a module that is fine.
-- **A missing dispatch token fails rather than warns.** It used to exit 0, which
-  meant an unset token reported green while nothing was ever sent. The tag and
-  the binaries already exist by then, so a red run costs nothing that can be
-  undone and is how a broken chain becomes visible.
-- **The dispatch goes to the registry, not to the Platform.** Dispatching a
-  core-module bump here could only ever fail: it would move a require that does
-  not exist, and the Platform refuses a bump for a module it does not already
-  require — adding one is a human decision.
-
-Warm the Go proxy after tagging anyway: anything building this from source
-resolves it as an ordinary Go module, and the proxy and checksum database are
-eventually consistent with a just-pushed tag.
-
-**A `replace` must never land in a commit.** The module reports the version that
-was **actually linked**, via `v1.ModuleVersion` reading the build graph — not a
-hand-maintained constant, which nothing forces to agree with anything.
-
-## Decision records
+## Records, licence, observability
 
 [`docs/adr/README.md`](docs/adr/README.md) is the generated index of the records
-this repository owns, with each one's status. **Read the index rather than
-counting files, and do not restate a status here** — it is generated from the
-records and this file is not.
+this repository owns; read it rather than counting files, and never hand-edit it.
+`scripts/adr_index.py` and `scripts/adr_lint.py` are **vendored** from
+`architecture/scripts/` and run by this gate — change them there and re-vendor.
 
-The index script and the citation lint that
-[`architecture`](https://github.com/mosaic-media/architecture) owns for the fleet
-are **vendored into `scripts/` and run by this repository's gate**, so a stale
-index or an unresolvable citation refuses a push here. **Do not edit either copy
-here** — their source is `architecture/scripts/` and a drifted copy is a gate
-enforcing a rule that has moved, which has happened once already. Change them
-there and re-vendor with `architecture/scripts/vendored_scripts.py`.
-
-## Modules are the forcing function for the SDK
-
-This module exists to find the contract's gaps by using it. **When something
-cannot be expressed, that is a finding, not an obstacle to work around** — take
-it to the SDK as an additive bump, or record it in the roadmap as an open gap.
-**Do not simulate the missing surface locally.**
-
-**Which side a finding lands on is not arbitrary.** The SDK says how a module
-interacts with the Platform; the Platform holds the implementations. So a finding
-takes the form of a type or a verb that names no library, and one that can only
-be closed by naming a library is a Platform change reached through a declarative
-surface. What the SDK currently carries, and what it has decided to stop
-carrying, is [`sdk`](https://github.com/mosaic-media/sdk)'s own business — read
-its instructions and its records rather than a summary here.
-
-## Observability
-
-Observability goes through the SDK's ambient `v1.Telemetry`
-([sdk#5](https://github.com/mosaic-media/sdk/blob/main/docs/adr/0005-modules-observe-through-the-sdk.md)),
-reached as `TelemetryFrom(ctx)`. **Do not print**, and do not configure an
-exporter, a sink or retention — the Platform owns the observability plane. An
-addon URL a user pasted may carry configuration they consider private; classify
-it rather than writing it verbatim.
-
-<!-- shared-rules:begin -->
-## Rules every Mosaic repository shares
-
-*Generated. The source is `architecture/shared/repository-rules.md`; edit it there
-and run `scripts/shared_rules.py --write` across the fleet. A copy edited in place
-fails its repository's gate, which is the point: these rules were eleven
-hand-kept copies in four variants, and the abridged ones had quietly dropped the
-reasoning while keeping the rules — and in one case dropped a rule outright.*
-
-### What this file may say
-
-**A `CLAUDE.md` states rules, and facts about its own repository. It does not
-state facts about another one — it links instead.**
-
-An audit of all twelve of these files against their source found 74 stale claims.
-None of roughly 180 rules was wrong; 62 of the 74 were facts about somebody
-else's repository. Ownership predicts rot: a fact about this repository stays true
-because whoever changes the code changes the sentence in the same session, and a
-fact about another one dies the moment they edit it with nothing here going red.
-
-The same applies to facts this repository already publishes in a generated
-artefact — counts, versions, what is built. Point at the artefact.
-
-### Decision records live with the code they govern
-
-Each repository owns the records whose *mechanism* it holds — the spec file, the
-lint gate, the conformance corpus, the composition root, the release workflow.
-A decision can bind five repositories and still have exactly one steward.
-
-- **`docs/adr/`**, numbered from 1 in every repository, with `docs/adr/README.md`
-  a **generated** index. Read the index first; it is the bounded thing.
-- **A record's heading carries no number.** The number lives in the filename and
-  the index only, so a record's anchor survives being renumbered.
-- **Cite a record as `repo#N`, and make it a link** — a relative path within a
-  repository, an absolute URL across them, and the bare label only where no URL
-  is possible, such as a code comment or a Dockerfile. The old `ADR NNNN`
-  spelling is refused by a lint: once every repository numbers from 1, that form
-  resolves quietly to a *different* record instead of dangling, and no tool in
-  the fleet could detect it.
-- **Cross-cutting records stay in [`architecture`](https://github.com/mosaic-media/architecture)** —
-  the ones with no enforcing mechanism anywhere: licensing, repository naming and
-  topology, the module tier model.
-
-### Decision records are append-only
-
-An ADR is an account of what was decided and why, at a time. It is evidence, not
-documentation, and its value is that it was not edited afterwards.
-
-- **Never rewrite a record's body** — not to correct it, not to annotate it, not
-  to add "as built, this differs". That turns a record into a running commentary
-  and destroys the thing it is for.
-- **State changes go in the `**Status:**` line and nowhere else** — built, built
-  in part (naming the part), or superseded, wholly or partly.
-- **A changed decision earns a new record that supersedes it**, with its own
-  Context / Decision / Alternatives / Consequences, and both records then point
-  at each other through their Status lines. The old body stays exactly as it was.
-- **An unbuilt decision is not a superseded one.** "Not done yet" belongs in the
-  Status line and the roadmap; only a reversal earns a new record.
-
-### The roadmap is maintained, not consulted
-
-**`docs/roadmap.md` in [`architecture`](https://github.com/mosaic-media/architecture)
-is the single record of where the build is, across every repository.** It stays
-there because a milestone spans repositories by construction. Read it before
-starting, and **update it in the same session as the change that dates it** — not
-in a follow-up, which does not happen.
-
-- A slice that lands is marked landed, **with what it left out named in the same
-  sentence**. "Built" with no qualifier claims the whole slice shipped.
-- Implementation that departed from its record is recorded where it departed.
-  The surprises are the most valuable thing in it.
-- **Do not restate the roadmap here.** A second copy of "what is built" in a
-  `CLAUDE.md` is how the first copy goes stale unnoticed.
-- A capability with no client path is not done — it is
-  [owed](https://github.com/mosaic-media/architecture/blob/main/docs/unreachable-capability.md).
-
-### Demonstrated, not asserted
-
-**Say what you actually ran.** A skipped test is not a passed test, and "it should
-work" is not evidence.
-
-Each repository's container is the authority on its own gate, and the command is
-in that repository's section below. It exists because the checks that matter fail
-*soft*: a missing PostgreSQL skips storage tests and still prints `ok`, a missing
-generator toolchain produces a drift guard that passes by not running. Where the
-container cannot be run, running what you can on the host is better than running
-nothing — **provided you report which checks ran and which did not.** Claiming a
-gate passed when it was not executed is the one thing this rule exists to stop.
-
-### Commit and push
-
-- **Commit and push each repository separately.** They are siblings on disk and
-  independent in git.
-- **Commit author identity** must be `AdamNi-7080 <anicholls41@gmail.com>`. If git
-  has no identity configured, set it repo-locally rather than globally.
-- **Push once the change has been demonstrated working in this session.** Commit
-  locally and say so otherwise. **Force-push always requires asking.**
-<!-- shared-rules:end -->
+MIT-licensed; files carry **no SPDX header** — match the files already present.
+Observability goes through `v1.TelemetryFrom(ctx)`, and **nothing may be written
+to stdout**, where go-plugin's handshake lives. An addon URL a user pasted may
+carry configuration they consider private: classify it, never log it verbatim.
